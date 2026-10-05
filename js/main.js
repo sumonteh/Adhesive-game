@@ -161,8 +161,21 @@ ui.onReport((action) => {
   else ui.showMenu();
 });
 document.getElementById('btn-menu').addEventListener('click', () => { releaseTool(); ui.showMenu(); });
-document.getElementById('btn-finish').addEventListener('click', () => {
-  if (game && !game.finished && confirm('¿Terminar el procedimiento y ver la evaluación?')) { releaseTool(); game.finish(); }
+// Confirmación en dos clics (sin confirm(), que algunos visores bloquean).
+const finishBtn = document.getElementById('btn-finish');
+let finishArmed = null;
+finishBtn.addEventListener('click', () => {
+  if (!game || game.finished) return;
+  if (!finishArmed) {
+    finishBtn.textContent = '¿Confirmar?';
+    finishBtn.classList.add('armed');
+    finishArmed = setTimeout(() => { finishArmed = null; finishBtn.textContent = 'Terminar'; finishBtn.classList.remove('armed'); }, 3000);
+    return;
+  }
+  clearTimeout(finishArmed); finishArmed = null;
+  finishBtn.textContent = 'Terminar'; finishBtn.classList.remove('armed');
+  releaseTool();
+  game.finish();
 });
 
 // ---- Tamaño -----------------------------------------------------------------
