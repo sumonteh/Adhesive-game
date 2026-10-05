@@ -2,12 +2,12 @@
 
 export const LEVELS = [
   {
-    id: 1, cavity: 'claseI', matrix: false, fiber: false,
+    id: 1, cavity: 'claseI', matrix: false, fiber: false, timeLimit: 300,
     title: 'Nivel 1 · Clase I oclusal',
     desc: 'Lesión oclusal en molar. Domina el protocolo adhesivo, el control de la humedad y el resin coat.',
   },
   {
-    id: 2, cavity: 'mod', matrix: true, fiber: true,
+    id: 2, cavity: 'mod', matrix: true, fiber: true, timeLimit: 420,
     title: 'Nivel 2 · Biomimética: MOD profunda',
     desc: 'Cavidad MOD con pérdida de rebordes marginales. Matriz, resin coat, fibra de polietileno y estratificación dentina/esmalte.',
   },

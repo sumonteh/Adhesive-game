@@ -38,6 +38,7 @@ export class UI {
       level: LEVELS.find(l => l.id === id),
       protocol: document.querySelector('input[name=protocol]:checked').value,
       adhesive: document.querySelector('input[name=adhesive]:checked').value,
+      timed: document.getElementById('opt-timed').checked,
     };
   }
 
@@ -48,11 +49,15 @@ export class UI {
   setConfigLabel(cfg) {
     const p = cfg.protocol === 'total' ? 'Grabado total' : 'Grabado selectivo';
     const a = cfg.adhesive === 'universal' ? 'Adhesivo universal' : 'Autograbante 2 frascos';
-    $('#cfg-label').textContent = `${cfg.level.title} · ${p} · ${a}`;
+    $('#cfg-label').textContent = `${cfg.level.title} · ${p} · ${a}${cfg.timed ? ' · ⏱ Contrarreloj' : ''}`;
+    $('#clock-label').textContent = cfg.timed ? 'Restante' : 'Tiempo';
+    $('#clock').classList.remove('urgent');
   }
 
-  setClock(t) {
+  setClock(t, urgent = false) {
+    t = Math.max(0, t);
     const m = Math.floor(t / 60), s = Math.floor(t % 60);
+    $('#clock').classList.toggle('urgent', urgent);
     $('#clock').textContent = `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
   }
 
@@ -196,6 +201,8 @@ export class UI {
         ${line('Tensión de contracción', Math.round(ev.stress) + '%')}
         ${line('Índice biomimético', Math.round(ev.bio) + '%')}
         ${line('Penalizaciones', '−' + ev.pen)}
+        ${ev.timed ? line('Bonificación por tiempo', '+' + ev.timeBonus) : ''}
+        ${ev.timed ? line('Récord (esta configuración)', ev.best + (ev.newBest ? ' 🏆 ¡nuevo!' : '')) : ''}
       </div>
       <h4>Análisis del procedimiento</h4>
       <ul class="fb">${ev.feedback.map(f => `<li class="${f.ok ? 'ok' : 'bad'}">${f.ok ? '✔' : '✖'} ${esc(f.text)}</li>`).join('')}</ul>

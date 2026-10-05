@@ -11,7 +11,16 @@ python3 -m http.server 8000
 # abre http://localhost:8000
 ```
 
-También funciona en GitHub Pages. Three.js se carga desde jsDelivr (r160).
+Three.js se carga desde jsDelivr (r160).
+
+### Publicarlo en GitHub Pages
+
+1. En el repositorio: **Settings → Pages**.
+2. En *Build and deployment*, elige **Source: Deploy from a branch**.
+3. Selecciona la rama `claude/dental-adhesion-3d-game-qt8pda` (o `main` si luego la fusionas), carpeta **/ (root)**, y guarda.
+4. En uno o dos minutos el juego queda en `https://sumonteh.github.io/Adhesive-game/`.
+
+El archivo `.nojekyll` hace que GitHub sirva los archivos tal cual, sin procesarlos con Jekyll.
 
 ## Casos y protocolos
 
@@ -19,6 +28,8 @@ También funciona en GitHub Pages. Three.js se carga desde jsDelivr (r160).
 |---|---|---|
 | 1 | Clase I oclusal | Protocolo adhesivo completo + resin coat + estratificación |
 | 2 | MOD profunda (biomimética) | Matriz seccional, resin coat, fibra de polietileno, incrementos dentina/esmalte |
+
+**Modo ⏱ contrarreloj** (opcional, en el menú): 5 min para el Nivel 1 y 7 min para el Nivel 2. Si terminas y pules a tiempo, el tiempo sobrante suma hasta +15 puntos. Si se agota, el procedimiento se evalúa tal como quedó. El récord de cada configuración se guarda en el navegador.
 
 **Estrategias de grabado**
 - **Grabado total:** ácido ortofosfórico 37%, **esmalte 15 s y dentina 10 s**, y luego adhesivo universal en modo grabado total con técnica húmeda.

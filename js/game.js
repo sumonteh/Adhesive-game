@@ -395,13 +395,28 @@ export class Game {
     if (this.extruding) this.endExtrude();
     this.stopLamp();
     this.finished = true;
-    this.ui.showReport(this.evaluate());
+    const ev = this.evaluate();
+    if (this.cfg.timed) {
+      const key = `biobond-best-${this.cfg.level.id}-${this.cfg.protocol}-${this.cfg.adhesive}`;
+      let best = 0;
+      try { best = +localStorage.getItem(key) || 0; } catch { /* almacenamiento no disponible */ }
+      ev.newBest = ev.score > best;
+      ev.best = Math.max(best, ev.score);
+      try { if (ev.newBest) localStorage.setItem(key, String(ev.score)); } catch { /* sin persistencia */ }
+    }
+    this.ui.showReport(ev);
   }
 
   // ---- Bucle --------------------------------------------------------------
   update(dt) {
     if (!this.finished) {
       this.t += dt;
+      if (this.cfg.timed && this.t >= this.cfg.level.timeLimit && !this.timedOut) {
+        this.timedOut = true;
+        this.mistake('timeout', 'Se agotó el tiempo', 'El procedimiento se evalúa en el estado en que quedó.', 0);
+        this.finish();
+        return;
+      }
       if (this.lamp.on) {
         this.lamp.time += dt;
         for (const it of this.lamp.items) it.t += dt;
@@ -418,7 +433,11 @@ export class Game {
         for (const st of this.steps) if (!st.done && st.check(this)) { st.done = true; changed = true; }
         if (changed) this.ui.updateSteps(this.steps);
         this.ui.setReadouts(this.readouts());
-        this.ui.setClock(this.t);
+        if (this.cfg.timed) {
+          const left = this.cfg.level.timeLimit - this.t;
+          this.ui.setClock(left, left <= 30);
+          if (left <= 30 && left > 29.8) this.tip('time30', '⏱ Quedan 30 segundos', 'Prioriza terminar la restauración.', 'warn');
+        } else this.ui.setClock(this.t);
       }
       this._evalTimer -= dt;
       if (this._evalTimer <= 0) { this._evalTimer = 1; this.ui.setMetrics(evaluate(this)); }

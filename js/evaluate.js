@@ -109,7 +109,11 @@ export function evaluate(g) {
   const bond = clamp((enamelMPa / 42 + dentinMPa / 44) / 2 * 100, 0, 100);
   let pen = 0;
   for (const m of g.mistakes.values()) pen += m.pen;
-  const score = Math.round(clamp(0.3 * bond + 0.25 * (100 - leak) + 0.15 * (100 - stress) + 0.3 * bio - pen, 0, 100));
+  const timed = !!g.cfg.timed;
+  const left = timed ? Math.max(0, g.cfg.level.timeLimit - g.t) : 0;
+  // La bonificación solo se gana con la restauración terminada y pulida dentro del tiempo.
+  const timeBonus = timed && g.polished && !g.timedOut ? Math.round(15 * left / g.cfg.level.timeLimit) : 0;
+  const score = Math.round(clamp(0.3 * bond + 0.25 * (100 - leak) + 0.15 * (100 - stress) + 0.3 * bio - pen + timeBonus, 0, 100));
   const stars = score >= 85 ? 3 : score >= 65 ? 2 : score >= 40 ? 1 : 0;
 
   // ---- Retroalimentación ----
@@ -147,6 +151,7 @@ export function evaluate(g) {
     filled ? (overfill ? bad('Restauración sobreobturada') : good('Anatomía oclusal reconstruida')) : bad('Restauración incompleta');
   }
   if (g.polished) good('Acabado y pulido');
+  if (timed) g.timedOut ? bad('Se agotó el tiempo antes de terminar') : g.polished ? good(`Terminado con ${Math.floor(left / 60)}:${String(Math.floor(left % 60)).padStart(2, '0')} de sobra (+${timeBonus})`) : null;
 
   // ---- Parámetros para la vista microscópica ----
   const etchedSel = !total && dentinEtched;
@@ -177,5 +182,5 @@ export function evaluate(g) {
     enamelEtch: E.avg, enamelCov: E.cov, enamelAdh: L.adhE,
   };
 
-  return { enamelMPa, dentinMPa, leak, stress, bio, bond, score, stars, pen, feedback: fb, micro, incs, filled };
+  return { enamelMPa, dentinMPa, leak, stress, bio, bond, score, stars, pen, timed, timeBonus, feedback: fb, micro, incs, filled };
 }

@@ -38,6 +38,8 @@ button { font-family: inherit; }
 .stat { display: flex; flex-direction: column; align-items: flex-end; line-height: 1.1; }
 .stat span { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
 .stat b { font-variant-numeric: tabular-nums; font-size: 16px; }
+.stat b.urgent { color: var(--bad); animation: pulse 1s infinite; }
+@keyframes pulse { 50% { opacity: .45; } }
 
 .btn { background: var(--panel-2); color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 7px 12px; cursor: pointer; font-size: 13px; }
 .btn:hover { border-color: var(--accent); }

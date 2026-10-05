@@ -23,7 +23,7 @@
       <div class="brand">🦷 <b>BioBond 3D</b><span class="sub">Adhesión y biomimética dental</span></div>
       <div id="cfg-label" class="chip"></div>
       <div class="spacer"></div>
-      <div class="stat"><span>Tiempo</span><b id="clock">00:00</b></div>
+      <div class="stat"><span id="clock-label">Tiempo</span><b id="clock">00:00</b></div>
       <button id="btn-finish" class="btn ghost">Terminar</button>
       <button id="btn-menu" class="btn ghost">Menú</button>
     </header>
@@ -76,6 +76,10 @@
       <div class="options">
         <label class="opt"><input type="radio" name="adhesive" value="universal" checked><div><b>Adhesivo universal</b><small>1 frasco · frotar 20 s · aire 5 s · luz 10 s</small></div></label>
         <label class="opt"><input type="radio" name="adhesive" value="se2"><div><b>Autograbante de 2 frascos</b><small>Primer con MDP 20 s + adhesivo · con grabado selectivo</small></div></label>
+      </div>
+      <h4>4 · Modo</h4>
+      <div class="options">
+        <label class="opt"><input type="checkbox" id="opt-timed"><div><b>⏱ Contrarreloj</b><small>Tiempo límite: 5 min (Nivel 1) · 7 min (Nivel 2). El tiempo sobrante suma hasta +15 puntos; si se agota, el procedimiento termina tal como esté.</small></div></label>
       </div>
       <details class="howto">
         <summary>¿Cómo se juega?</summary>
