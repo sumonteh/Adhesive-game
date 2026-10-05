@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>BioBond 3D</title>
+  <meta name="description" content="Simulador 3D de adhesión dental y odontología biomimética: arrastra instrumentos y materiales al diente siguiendo el protocolo.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
+  <link rel="stylesheet" href="css/styles.css">
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+    }
+  }
+  </script>
+</head>
+<body>
+  <div id="app">
+    <header id="topbar">
+      <div class="brand">🦷 <b>BioBond 3D</b><span class="sub">Adhesión y biomimética dental</span></div>
+      <div id="cfg-label" class="chip"></div>
+      <div class="spacer"></div>
+      <div class="stat"><span>Tiempo</span><b id="clock">00:00</b></div>
+      <button id="btn-finish" class="btn ghost">Terminar</button>
+      <button id="btn-menu" class="btn ghost">Menú</button>
+    </header>
+
+    <aside id="steps-panel" class="panel">
+      <h3>Protocolo</h3>
+      <ol id="steps"></ol>
+      <p class="hint">Toca un paso para ver el <em>porqué</em>.</p>
+    </aside>
+
+    <main id="viewport">
+      <canvas id="c"></canvas>
+      <div id="readouts"></div>
+      <div id="lampbar" class="hidden">
+        <div class="lamp-info"><b>💡 Fotopolimerizando</b> <span id="lamp-time">0.0 s</span></div>
+        <div id="lamp-items"></div>
+        <button id="btn-lamp-off" class="btn">Apagar lámpara</button>
+      </div>
+      <div id="held" class="hidden"><span id="held-name"></span><button id="btn-release" class="btn small">Soltar (Esc)</button></div>
+      <div id="view-switch"><button id="btn-view" class="btn">🔬 Microscopio</button></div>
+      <div id="micro-ui" class="hidden">
+        <div class="tabs"><button data-tab="dentina" class="active">Dentina</button><button data-tab="esmalte">Esmalte</button></div>
+        <p class="fine">Esquema no a escala: las capas superiores están comprimidas. Arrastra para girar.</p>
+      </div>
+      <div id="help-tip">Arrastra un instrumento desde la bandeja al diente · Arrastra el fondo para girar · Rueda para zoom</div>
+    </main>
+
+    <aside id="metrics-panel" class="panel">
+      <h3>Proyección clínica</h3>
+      <div id="metrics"></div>
+      <h3>Errores</h3>
+      <ul id="mistakes"></ul>
+    </aside>
+
+    <footer id="tray"></footer>
+  </div>
+
+  <div id="menu" class="overlay">
+    <div class="card">
+      <h1>🦷 BioBond 3D</h1>
+      <p class="lead">Simulador de adhesión y odontología biomimética. Arrastra instrumentos y materiales al diente siguiendo el protocolo: cada decisión modifica la capa híbrida, el sellado y la tensión de contracción.</p>
+      <h4>1 · Caso clínico</h4>
+      <div class="options" id="opt-level"></div>
+      <h4>2 · Estrategia de grabado</h4>
+      <div class="options">
+        <label class="opt"><input type="radio" name="protocol" value="total" checked><div><b>Grabado total</b><small>Ácido ortofosfórico 37%: esmalte 15 s + dentina 10 s</small></div></label>
+        <label class="opt"><input type="radio" name="protocol" value="selective"><div><b>Grabado selectivo del esmalte</b><small>Ácido solo en esmalte 15 s · dentina en modo autograbante</small></div></label>
+      </div>
+      <h4>3 · Sistema adhesivo</h4>
+      <div class="options">
+        <label class="opt"><input type="radio" name="adhesive" value="universal" checked><div><b>Adhesivo universal</b><small>1 frasco · frotar 20 s · aire 5 s · luz 10 s</small></div></label>
+        <label class="opt"><input type="radio" name="adhesive" value="se2"><div><b>Autograbante de 2 frascos</b><small>Primer con MDP 20 s + adhesivo · con grabado selectivo</small></div></label>
+      </div>
+      <details class="howto">
+        <summary>¿Cómo se juega?</summary>
+        <ul>
+          <li><b>Arrastra</b> un instrumento de la bandeja al diente. También puedes tocarlo para tomarlo y luego presionar sobre el diente.</li>
+          <li>Los líquidos (ácido, agua, aire, adhesivos, fluida) se aplican <b>mientras mantienes presionado</b> y recorres la superficie.</li>
+          <li>El composite se extruye mientras mantienes presionado (1 mm/s). Suelta para terminar cada incremento.</li>
+          <li>La lámpara queda encendida hasta que pulses <b>Apagar lámpara</b>: tú controlas el tiempo.</li>
+          <li>Con un instrumento en la mano, gira la vista con clic derecho (o con dos dedos). <b>Esc</b> lo suelta.</li>
+          <li>Usa el <b>🔬 Microscopio</b> para ver la capa híbrida que estás construyendo.</li>
+        </ul>
+      </details>
+      <button id="btn-start" class="btn primary big">Comenzar</button>
+    </div>
+  </div>
+
+  <div id="report" class="overlay hidden"><div class="card wide" id="report-card"></div></div>
+  <div id="toasts"></div>
+  <div id="ghost" class="hidden"></div>
+
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>
