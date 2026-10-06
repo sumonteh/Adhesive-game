@@ -3,7 +3,8 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { Game } from './game.js';
-import { TOOLS, trayFor, makeToolModel, Spray } from './tools.js';
+import { TOOLS, CATALOG, makeToolModel, Spray } from './tools.js';
+import { Planner } from './planner.js';
 import { MicroView } from './micro.js';
 import { UI } from './ui.js';
 
@@ -47,7 +48,6 @@ const spray = new Spray(scene);
 const raycaster = new THREE.Raycaster();
 
 let game = null;
-let lastCfg = null;
 let view = 'clinic';
 let microTab = 'dentina';
 
@@ -110,7 +110,7 @@ window.addEventListener('pointermove', updatePointer);
 window.addEventListener('pointerup', () => {
   if (!heldId || !applying) return;
   const tool = TOOLS[heldId];
-  if (tool.type === 'drop') {
+  if (tool.type === 'drop' || tool.type === 'distractor') {
     if (hit && game) { game.drop(heldId, hit); releaseTool(); return; }
   }
   endApplying();
@@ -142,22 +142,44 @@ document.querySelectorAll('#micro-ui .tabs button').forEach(b => b.addEventListe
 }));
 
 // ---- Partidas ---------------------------------------------------------------
-function startGame(cfg) {
-  lastCfg = cfg;
+let lastSetup = null;
+let trayIds = [];
+
+function buildTray() {
+  ui.buildTray(trayIds, pickTool, () => {
+    if (!game || game.finished) return;
+    releaseTool();
+    ui.showAskPicker(CATALOG.filter(id => !trayIds.includes(id)), (id) => {
+      trayIds.push(id);
+      game.requestMaterial(id);
+      buildTray();
+    });
+  });
+}
+
+// cfg: caso y protocolo · tray: bandeja que armó el alumno · plan: corrección de la bandeja
+function startGame(cfg, tray, plan, decision) {
+  lastSetup = { cfg, tray: [...tray], plan, decision };
   releaseTool();
   if (game) game.dispose();
   setView('clinic');
-  game = new Game(scene, ui, cfg);
+  game = new Game(scene, ui, cfg, plan, decision);
+  trayIds = [...tray];
   ui.setConfigLabel(cfg);
-  ui.buildTray(trayFor(cfg), pickTool);
+  buildTray();
   ui.setMetrics(game.evaluate());
   resetCamera();
-  window.bb = { game, scene, camera, controls };
+  window.bb = { game, scene, camera, controls, planner };
 }
-ui.onStart(startGame);
+
+const planner = new Planner(document.getElementById('planner'));
+ui.onPlan((cfg) => planner.open(cfg, (tray, plan, decision) => { ui.hideMenu(); startGame(cfg, tray, plan, decision); }));
+document.getElementById('pl-verify').addEventListener('click', () => planner.verify());
+document.getElementById('pl-fix').addEventListener('click', () => planner.useRecommended());
+document.getElementById('pl-start').addEventListener('click', () => planner.start());
 ui.onReport((action) => {
   if (action === 'micro') setView('micro');
-  else if (action === 'retry') startGame(lastCfg);
+  else if (action === 'retry') startGame(lastSetup.cfg, lastSetup.tray, lastSetup.plan, lastSetup.decision);
   else ui.showMenu();
 });
 document.getElementById('btn-menu').addEventListener('click', () => { releaseTool(); ui.showMenu(); });

@@ -20,19 +20,57 @@ export const TOOLS = {
   compDentina: { name: 'Composite dentina A3 (opaco)',  icon: '🟫', color: '#dcbd88', type: 'extrude', shade: 'dentina' },
   compEsmalte: { name: 'Composite esmalte A2 (transl.)', icon: '⬜', color: '#f1eadb', type: 'extrude', shade: 'esmalte' },
   pulido:      { name: 'Discos y gomas de pulido',      icon: '✨', color: '#ff9fb8', type: 'drop' },
+  // Distractores: aparecen en el gabinete para que el alumno decida que NO corresponden.
+  hidroxido:   { name: 'Hidróxido de calcio',           icon: '🥛', color: '#e8e8e8', type: 'distractor',
+    why: 'Se reserva para exposiciones pulpares o dentina muy delgada sobre la pulpa. Aquí no está indicado y reduce la superficie disponible para la adhesión.' },
+  ionomero:    { name: 'Ionómero de vidrio (base)',     icon: '🧱', color: '#d8d2c4', type: 'distractor',
+    why: 'No forma parte de este protocolo: la dentina se hibridiza, se protege con resin coat y se reemplaza con composite.' },
+  hf:          { name: 'Ácido fluorhídrico 9.5%',       icon: '☣️', color: '#f26b3a', type: 'distractor',
+    why: 'Graba cerámicas vítreas (por ejemplo, disilicato de litio) fuera de boca o con protección extrema. Nunca se aplica sobre el diente: es muy tóxico para los tejidos.' },
+  silano:      { name: 'Silano',                        icon: '🧫', color: '#b9d7f0', type: 'distractor',
+    why: 'Agente de unión para cerámicas vítreas y rellenos de sílice. No se aplica sobre esmalte ni dentina.' },
+  hipoclorito: { name: 'Hipoclorito de sodio 5%',       icon: '🫧', color: '#cfe8d0', type: 'distractor',
+    why: 'Desproteiniza la dentina y deja residuos oxidantes que inhiben la polimerización del adhesivo. No forma parte de este protocolo.' },
+  eugenol:     { name: 'Cemento de óxido de zinc-eugenol', icon: '🌿', color: '#d6c79b', type: 'distractor',
+    why: 'El eugenol inhibe la polimerización de las resinas: contraindicado bajo restauraciones adhesivas.' },
+  amalgama:    { name: 'Amalgama',                      icon: '🪙', color: '#a7adb3', type: 'distractor',
+    why: 'Restauración no adhesiva. No corresponde a una restauración adhesiva biomimética.' },
 };
 
-export function trayFor(cfg) {
+// Bandeja ideal según el caso y el protocolo elegido, en orden de primer uso.
+export function expectedTray(cfg) {
   return [
     'dique',
     ...(cfg.level.matrix ? ['matriz'] : []),
-    'limpieza', 'acido', 'agua', 'aire', 'microbrush',
+    'limpieza', 'acido', 'agua', 'aire',
+    ...(cfg.protocol === 'total' ? ['microbrush'] : []),
     ...(cfg.adhesive === 'universal' ? ['universal'] : ['primer', 'bond']),
     'lampara', 'fluida',
-    ...(cfg.level.fiber ? ['fibra'] : []),
+    ...(cfg.fiber ? ['fibra'] : []),
     'compDentina', 'compEsmalte', 'pulido',
   ];
 }
+
+// Materiales que pueden estar en la bandeja sin sumar ni restar.
+export function optionalTools(cfg) {
+  return cfg.protocol === 'total' ? [] : ['microbrush'];
+}
+
+// Por qué un material no corresponde a esta bandeja.
+export function notIndicatedReason(id, cfg) {
+  const t = TOOLS[id];
+  if (t.type === 'distractor') return t.why;
+  if (id === 'matriz') return 'En una clase I no hay paredes proximales que reconstruir: la matriz no se necesita.';
+  if (id === 'fibra') return cfg.level.fiberIndicated
+    ? 'No incluiste el refuerzo con fibra en tu protocolo.'
+    : 'Cavidad poco profunda con rebordes intactos: la fibra no está indicada.';
+  if (id === 'primer' || id === 'bond') return 'Elegiste un adhesivo universal (un solo frasco): el sistema de 2 frascos no corresponde.';
+  if (id === 'universal') return 'Elegiste el autograbante de 2 frascos: el adhesivo universal no corresponde.';
+  return 'No corresponde a este protocolo.';
+}
+
+export const CATALOG = Object.keys(TOOLS);
+
 
 const cyl = (rt, rb, h, mat, y, seg = 16) => {
   const m = new THREE.Mesh(new THREE.CylinderGeometry(rt, rb, h, seg), mat);

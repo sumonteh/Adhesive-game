@@ -22,6 +22,13 @@ Three.js se carga desde jsDelivr (r160).
 
 El archivo `.nojekyll` hace que GitHub sirva los archivos tal cual, sin procesarlos con Jekyll.
 
+## Flujo de la partida
+
+1. **Caso clínico:** se presenta al paciente, la pieza y los hallazgos (profundidad, rebordes, márgenes).
+2. **Protocolo:** el alumno decide la estrategia de grabado, el sistema adhesivo y si usará refuerzo biomimético con fibra. También elige el modo guiado o sin guía, y si juega contrarreloj.
+3. **Bandeja:** el gabinete muestra todos los materiales desordenados, incluidos algunos distractores (hidróxido de calcio, ácido fluorhídrico, silano, hipoclorito, eugenol, amalgama…). El alumno elige solo los que usará y los ordena según el momento de uso. Al verificar, ve el orden recomendado, lo que faltó y por qué no corresponde cada distractor. Se evalúa el primer intento.
+4. **Procedimiento:** trabaja con su propia bandeja. Si le falta algo puede usar **＋ Pedir material** (−2 puntos), y usar un distractor sobre el diente penaliza.
+
 ## Casos y protocolos
 
 | Nivel | Caso | Incluye |

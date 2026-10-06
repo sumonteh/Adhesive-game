@@ -11,11 +11,12 @@ export class UI {
     this.toasts = $('#toasts');
   }
 
-  // ---- Menú ---------------------------------------------------------------
+  // ---- Asistente: caso → protocolo → bandeja ------------------------------
   _buildMenu() {
+    const chips = (l) => l.findings.map(f => `<span class="chip">${esc(f)}</span>`).join('');
     $('#opt-level').innerHTML = LEVELS.map((l, i) => `
-      <label class="opt"><input type="radio" name="level" value="${l.id}" ${i === 0 ? 'checked' : ''}>
-      <div><b>${esc(l.title)}</b><small>${esc(l.desc)}</small></div></label>`).join('');
+      <label class="opt case"><input type="radio" name="level" value="${l.id}" ${i === 0 ? 'checked' : ''}>
+      <div><b>${esc(l.title)}</b><span class="pt">${esc(l.patient)}</span><small>${esc(l.story)}</small><div class="chips">${chips(l)}</div></div></label>`).join('');
     const sync = () => {
       const total = document.querySelector('input[name=protocol]:checked').value === 'total';
       const se2 = document.querySelector('input[name=adhesive][value=se2]');
@@ -25,11 +26,24 @@ export class UI {
     };
     document.querySelectorAll('input[name=protocol]').forEach(r => r.addEventListener('change', sync));
     sync();
-    $('#btn-start').addEventListener('click', () => {
-      const cfg = this.readConfig();
-      this.hideMenu();
-      this._onStart?.(cfg);
+    $('#wz-next1').addEventListener('click', () => {
+      const l = this.readConfig().level;
+      $('#case-brief').innerHTML = `<b>${esc(l.title)}</b><span class="pt">${esc(l.patient)}</span><div class="chips">${chips(l)}</div>`;
+      this.gotoScreen(2);
     });
+    $('#wz-back2').addEventListener('click', () => this.gotoScreen(1));
+    $('#wz-next2').addEventListener('click', () => { this.gotoScreen(3); this._onPlan?.(this.readConfig()); });
+    $('#wz-back3').addEventListener('click', () => this.gotoScreen(2));
+  }
+
+  gotoScreen(n) {
+    document.querySelectorAll('#wizard .wz').forEach(s => s.classList.toggle('hidden', +s.dataset.screen !== n));
+    document.querySelectorAll('.wz-steps span').forEach(s => {
+      s.classList.toggle('active', +s.dataset.s === n);
+      s.classList.toggle('past', +s.dataset.s < n);
+    });
+    $('#wizard').classList.toggle('xwide', n === 3);
+    $('#wizard').scrollTop = 0;
   }
 
   readConfig() {
@@ -38,18 +52,20 @@ export class UI {
       level: LEVELS.find(l => l.id === id),
       protocol: document.querySelector('input[name=protocol]:checked').value,
       adhesive: document.querySelector('input[name=adhesive]:checked').value,
+      fiber: document.getElementById('opt-fiber').checked,
+      guided: document.getElementById('opt-guided').checked,
       timed: document.getElementById('opt-timed').checked,
     };
   }
 
-  onStart(cb) { this._onStart = cb; }
-  showMenu() { $('#menu').classList.remove('hidden'); }
+  onPlan(cb) { this._onPlan = cb; }
+  showMenu() { this.gotoScreen(1); $('#menu').classList.remove('hidden'); }
   hideMenu() { $('#menu').classList.add('hidden'); }
 
   setConfigLabel(cfg) {
     const p = cfg.protocol === 'total' ? 'Grabado total' : 'Grabado selectivo';
     const a = cfg.adhesive === 'universal' ? 'Adhesivo universal' : 'Autograbante 2 frascos';
-    $('#cfg-label').textContent = `${cfg.level.title} · ${p} · ${a}${cfg.timed ? ' · ⏱ Contrarreloj' : ''}`;
+    $('#cfg-label').textContent = `${cfg.level.title} · ${p} · ${a}${cfg.fiber ? ' · Fibra' : ''}${cfg.timed ? ' · ⏱ Contrarreloj' : ''}`;
     $('#clock-label').textContent = cfg.timed ? 'Restante' : 'Tiempo';
     $('#clock').classList.remove('urgent');
   }
@@ -62,12 +78,14 @@ export class UI {
   }
 
   // ---- Protocolo ----------------------------------------------------------
-  renderSteps(steps) {
+  renderSteps(steps, guided = true) {
     const ol = $('#steps');
     ol.innerHTML = '';
+    ol.classList.toggle('blind', !guided);
+    $('#steps-panel .hint').textContent = guided ? 'Toca un paso para ver el porqué.' : 'Modo sin guía: los pasos aparecen a medida que los completas.';
     for (const s of steps) {
       const li = document.createElement('li');
-      li.innerHTML = `<div class="st-head"><span class="st-dot"></span><span class="st-label">${esc(s.label)}</span></div><div class="st-why">${esc(s.why)}</div>`;
+      li.innerHTML = `<div class="st-head"><span class="st-dot"></span><span class="st-label">${esc(s.label)}</span><span class="st-hidden">Paso por descubrir</span></div><div class="st-why">${esc(s.why)}</div>`;
       li.addEventListener('click', () => li.classList.toggle('open'));
       s.el = li;
       ol.appendChild(li);
@@ -86,7 +104,7 @@ export class UI {
   }
 
   // ---- Bandeja ------------------------------------------------------------
-  buildTray(ids, onPick) {
+  buildTray(ids, onPick, onAsk) {
     const tray = $('#tray');
     tray.innerHTML = '';
     for (const id of ids) {
@@ -95,11 +113,27 @@ export class UI {
       b.className = 'tool';
       b.dataset.id = id;
       b.style.setProperty('--tc', t.color);
-      const hint = t.type === 'drop' ? 'soltar' : t.type === 'extrude' ? 'mantener' : 'aplicar';
+      const hint = t.type === 'extrude' ? 'mantener' : t.type === 'paint' ? 'aplicar' : 'soltar';
       b.innerHTML = `<span class="ti">${t.icon}</span><span class="tn">${esc(t.name)}</span><span class="tt">${hint}</span>`;
       b.addEventListener('pointerdown', (e) => { e.preventDefault(); onPick(id, e); });
       tray.appendChild(b);
     }
+    if (onAsk) {
+      const ask = document.createElement('button');
+      ask.className = 'tool ask';
+      ask.innerHTML = '<span class="ti">＋</span><span class="tn">Pedir material</span><span class="tt">−2 pts</span>';
+      ask.addEventListener('click', onAsk);
+      tray.appendChild(ask);
+    }
+  }
+
+  // Selector de materiales que no están en la bandeja (pedir al asistente).
+  showAskPicker(ids, onChoose) {
+    const ov = $('#ask');
+    $('#ask-list').innerHTML = ids.map(id => `<button class="pl-card" data-id="${id}" style="--tc:${TOOLS[id].color}"><span class="pl-i">${TOOLS[id].icon}</span><span class="pl-t">${esc(TOOLS[id].name)}</span></button>`).join('');
+    $('#ask-list').querySelectorAll('button').forEach(b => b.addEventListener('click', () => { ov.classList.add('hidden'); onChoose(b.dataset.id); }));
+    $('#ask-cancel').onclick = () => ov.classList.add('hidden');
+    ov.classList.remove('hidden');
   }
 
   setHeld(id) {
@@ -111,7 +145,7 @@ export class UI {
       h.classList.remove('hidden');
       g.textContent = t.icon;
       g.classList.remove('hidden');
-      $('#help-tip').textContent = t.type === 'drop'
+      $('#help-tip').textContent = (t.type === 'drop' || t.type === 'distractor')
         ? 'Suelta sobre el diente · Clic derecho para girar la vista'
         : t.type === 'extrude'
           ? 'Mantén presionado dentro de la cavidad para extruir (1 mm/s) · Suelta para terminar el incremento'

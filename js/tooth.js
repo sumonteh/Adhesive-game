@@ -332,10 +332,6 @@ export class Tooth {
     this.dam.position.y = 0.16;
     this.dam.visible = false;
     this.dam.raycast = () => {};
-    const clampMat = new THREE.MeshStandardMaterial({ color: '#cfd6dd', metalness: 0.9, roughness: 0.25 });
-    const bow = new THREE.Mesh(new THREE.TorusGeometry(1.15, 0.025, 8, 48, Math.PI), clampMat);
-    bow.rotation.y = Math.PI / 2; bow.position.y = 0.28; bow.scale.set(1, 0.55, 0.85);
-    this.dam.add(bow);
     this.group.add(this.dam);
 
     // Matriz seccional + cuñas

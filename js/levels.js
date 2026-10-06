@@ -2,14 +2,20 @@
 
 export const LEVELS = [
   {
-    id: 1, cavity: 'claseI', matrix: false, fiber: false, timeLimit: 300,
+    id: 1, cavity: 'claseI', matrix: false, fiberIndicated: false, timeLimit: 300,
     title: 'Nivel 1 · Clase I oclusal',
     desc: 'Lesión oclusal en molar. Domina el protocolo adhesivo, el control de la humedad y el resin coat.',
+    patient: 'Mujer de 22 años · pieza 3.6 · pulpa vital, sin sintomatología',
+    story: 'Lesión de caries oclusal cavitada (ICDAS 5). Tras remover el tejido infectado queda una cavidad clase I limitada a la cara oclusal.',
+    findings: ['Profundidad ≈ 4 mm', 'Márgenes en esmalte', 'Rebordes marginales intactos', 'Cúspides con buen espesor'],
   },
   {
-    id: 2, cavity: 'mod', matrix: true, fiber: true, timeLimit: 420,
-    title: 'Nivel 2 · Biomimética: MOD profunda',
-    desc: 'Cavidad MOD con pérdida de rebordes marginales. Matriz, resin coat, fibra de polietileno y estratificación dentina/esmalte.',
+    id: 2, cavity: 'mod', matrix: true, fiberIndicated: true, timeLimit: 420,
+    title: 'Nivel 2 · MOD profunda',
+    desc: 'Cavidad MOD con pérdida de ambos rebordes marginales y cúspides debilitadas.',
+    patient: 'Hombre de 45 años · pieza 3.6 · pulpa vital, sensibilidad leve al frío',
+    story: 'Restauración de amalgama MOD fracturada con caries secundaria. Tras retirarla queda una cavidad MOD amplia y profunda: el diente perdió los dos rebordes marginales, que son su principal refuerzo estructural.',
+    findings: ['Profundidad ≈ 6 mm (cajas proximales)', 'Pérdida de ambos rebordes marginales', 'Cúspides debilitadas, sin fractura', 'Margen gingival en esmalte'],
   },
 ];
 
@@ -69,7 +75,7 @@ export function buildSteps(cfg) {
 
   add('coat', 'Resin coat: resina fluida delgada sobre la dentina', WHY.coat, g => g.coat.started && g.live.coatD >= 0.75);
   add('coatCurar', 'Fotopolimerizar el resin coat 20 s', WHY.curar20, g => g.coat.cureQ !== null);
-  if (cfg.level.fiber) add('fibra', 'Fibra de polietileno en el piso + fotopolimerizar', WHY.fibra, g => g.fiber.placed && g.fiber.cureQ !== null);
+  if (cfg.fiber) add('fibra', 'Fibra de polietileno en el piso + fotopolimerizar', WHY.fibra, g => g.fiber.placed && g.fiber.cureQ !== null);
   add('dentina', 'Composite de dentina: incrementos ≤ 2 mm hasta la UAD', WHY.dentina,
     g => g.incs.some(i => i.shade === 'dentina' && i.cureQ !== null) && g.level >= g.tooth.dejY - 0.12 && lastCured(g));
   add('esmalte', 'Capa de esmalte ≤ 2 mm reproduciendo la anatomía', WHY.esmalte,

@@ -13,8 +13,10 @@ const SHADES = {
 };
 
 export class Game {
-  constructor(scene, ui, cfg) {
+  constructor(scene, ui, cfg, plan = null, decision = null) {
     this.scene = scene; this.ui = ui; this.cfg = cfg;
+    this.plan = plan; this.decision = decision;
+    this.requested = [];
     this.total = cfg.protocol === 'total';
     this.univ = cfg.adhesive === 'universal';
     this.tooth = new Tooth(cfg.level.cavity);
@@ -49,7 +51,10 @@ export class Game {
     this._liveTimer = 0;
     this._evalTimer = 0;
     this.computeLive();
-    ui.renderSteps(this.steps);
+    // La planificación se evalúa antes de empezar (sin avisos emergentes).
+    if (plan && plan.pen > 0) this.mistakes.set('plan', { title: `Planificación de la bandeja (${plan.score}/100)`, text: '', pen: plan.pen });
+    if (decision && decision.pen > 0) this.mistakes.set('decisionFiber', { title: 'Decisión de refuerzo con fibra', text: decision.text, pen: decision.pen });
+    ui.renderSteps(this.steps, cfg.guided !== false);
     ui.renderMistakes(this.mistakes);
   }
 
@@ -65,6 +70,11 @@ export class Game {
     this.ui.toast('err', title, text);
     this.ui.renderMistakes(this.mistakes);
   }
+  requestMaterial(id) {
+    this.requested.push(id);
+    this.mistake('ask_' + id, `Material pedido: ${TOOLS[id].name}`, 'No estaba en tu bandeja. Interrumpir la técnica para pedir materiales alarga el tiempo de trabajo y arriesga la contaminación del campo.', 2);
+  }
+
   tip(key, title, text, type = 'info') {
     if (key && this.tips.has(key)) return;
     if (key) this.tips.add(key);
@@ -254,6 +264,10 @@ export class Game {
   drop(id, hit) {
     if (this.finished) return;
     const T = this.tooth;
+    if (TOOLS[id].type === 'distractor') {
+      this.mistake('used_' + id, `${TOOLS[id].name}: no indicado`, TOOLS[id].why, 6);
+      return;
+    }
     switch (id) {
       case 'dique':
         if (this.flags.isolated) return;
@@ -341,7 +355,7 @@ export class Game {
     else if (a.cureQ === null) this.mistake('compAdhUncured', 'Composite sobre adhesivo sin polimerizar', 'Polimeriza el adhesivo antes de colocar resina.', 8);
     if (!this.coat.started) this.mistake('noCoat', 'Sin resin coat', 'Antes del composite, protege la dentina hibridizada con una capa delgada de resina fluida polimerizada.', 6);
     else if (this.coat.cureQ === null) this.mistake('coatUncuredInc', 'Resin coat sin polimerizar', 'Polimeriza la resina fluida 20 s antes de estratificar.', 4);
-    if (this.cfg.level.fiber && !this.fiber.placed) this.mistake('noFiber', 'Sin fibra de refuerzo', 'En cavidades MOD profundas, la fibra de polietileno en el piso refuerza el remanente y frena las grietas.', 5);
+    if (this.cfg.fiber && !this.fiber.placed) this.mistake('noFiber', 'Fibra planificada sin colocar', 'Tu protocolo incluía fibra de polietileno: va sobre la resina fluida, en el piso, antes del primer incremento.', 5);
     if (this.cfg.level.matrix && !this.flags.matrix) this.mistake('noMatrix', 'Sin matriz', 'Sin matriz no se pueden reconstruir las paredes proximales ni el punto de contacto.', 10);
     const last = this.incs[this.incs.length - 1];
     if (last && last.cureQ === null) this.mistake('incUncured' + this.incs.length, 'Incremento sin polimerizar', 'Polimeriza cada incremento 20 s antes de colocar el siguiente.', 5);

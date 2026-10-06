@@ -62,25 +62,60 @@
   </div>
 
   <div id="menu" class="overlay">
-    <div class="card">
-      <h1>🦷 BioBond 3D</h1>
-      <p class="lead">Simulador de adhesión y odontología biomimética. Arrastra instrumentos y materiales al diente siguiendo el protocolo: cada decisión modifica la capa híbrida, el sellado y la tensión de contracción.</p>
-      <h4>1 · Caso clínico</h4>
-      <div class="options" id="opt-level"></div>
-      <h4>2 · Estrategia de grabado</h4>
-      <div class="options">
-        <label class="opt"><input type="radio" name="protocol" value="total" checked><div><b>Grabado total</b><small>Ácido ortofosfórico 37%: esmalte 15 s + dentina 10 s</small></div></label>
-        <label class="opt"><input type="radio" name="protocol" value="selective"><div><b>Grabado selectivo del esmalte</b><small>Ácido solo en esmalte 15 s · dentina en modo autograbante</small></div></label>
-      </div>
-      <h4>3 · Sistema adhesivo</h4>
-      <div class="options">
-        <label class="opt"><input type="radio" name="adhesive" value="universal" checked><div><b>Adhesivo universal</b><small>1 frasco · frotar 20 s · aire 5 s · luz 10 s</small></div></label>
-        <label class="opt"><input type="radio" name="adhesive" value="se2"><div><b>Autograbante de 2 frascos</b><small>Primer con MDP 20 s + adhesivo · con grabado selectivo</small></div></label>
-      </div>
-      <h4>4 · Modo</h4>
-      <div class="options">
-        <label class="opt"><input type="checkbox" id="opt-timed"><div><b>⏱ Contrarreloj</b><small>Tiempo límite: 5 min (Nivel 1) · 7 min (Nivel 2). El tiempo sobrante suma hasta +15 puntos; si se agota, el procedimiento termina tal como esté.</small></div></label>
-      </div>
+    <div class="card wizard" id="wizard">
+      <nav class="wz-steps" aria-label="Preparación">
+        <span data-s="1" class="active">1 · Caso clínico</span><span data-s="2">2 · Protocolo</span><span data-s="3">3 · Bandeja</span>
+      </nav>
+
+      <section class="wz" data-screen="1">
+        <h1>🦷 BioBond 3D</h1>
+        <p class="lead">Simulador de adhesión y odontología biomimética. Lee el caso, decide el protocolo, prepara tu bandeja y luego ejecuta la técnica: cada decisión cambia la capa híbrida, el sellado y la tensión de contracción.</p>
+        <h4>Elige el caso</h4>
+        <div class="options" id="opt-level"></div>
+        <div class="wz-actions"><span></span><button id="wz-next1" class="btn primary">Decidir el protocolo →</button></div>
+      </section>
+
+      <section class="wz hidden" data-screen="2">
+        <div id="case-brief" class="case-brief"></div>
+        <h4>Estrategia de grabado</h4>
+        <div class="options">
+          <label class="opt"><input type="radio" name="protocol" value="total" checked><div><b>Grabado total</b><small>Ácido ortofosfórico 37%: esmalte 15 s + dentina 10 s</small></div></label>
+          <label class="opt"><input type="radio" name="protocol" value="selective"><div><b>Grabado selectivo del esmalte</b><small>Ácido solo en esmalte 15 s · dentina en modo autograbante</small></div></label>
+        </div>
+        <h4>Sistema adhesivo</h4>
+        <div class="options">
+          <label class="opt"><input type="radio" name="adhesive" value="universal" checked><div><b>Adhesivo universal</b><small>1 frasco · frotar 20 s · aire 5 s · luz 10 s</small></div></label>
+          <label class="opt"><input type="radio" name="adhesive" value="se2"><div><b>Autograbante de 2 frascos</b><small>Primer con MDP 20 s + adhesivo · con grabado selectivo</small></div></label>
+        </div>
+        <h4>Enfoque restaurador</h4>
+        <div class="options">
+          <label class="opt"><input type="checkbox" id="opt-fiber"><div><b>🧵 Biomimético con fibra de polietileno</b><small>Refuerzo con fibra sobre resina fluida en el piso de la cavidad, antes de estratificar.</small></div></label>
+        </div>
+        <h4>Modo de práctica</h4>
+        <div class="options two">
+          <label class="opt"><input type="checkbox" id="opt-guided" checked><div><b>📋 Guiado</b><small>Muestra todos los pasos del protocolo. Sin guía, solo ves los pasos que ya completaste.</small></div></label>
+          <label class="opt"><input type="checkbox" id="opt-timed"><div><b>⏱ Contrarreloj</b><small>5 min (Nivel 1) · 7 min (Nivel 2). El tiempo sobrante suma hasta +15 puntos.</small></div></label>
+        </div>
+        <div class="wz-actions"><button id="wz-back2" class="btn ghost">← Caso</button><button id="wz-next2" class="btn primary">Preparar la bandeja →</button></div>
+      </section>
+
+      <section class="wz hidden" data-screen="3" id="planner">
+        <h2>Prepara tu bandeja</h2>
+        <p class="lead">Elige del gabinete <b>solo</b> los materiales que vas a usar y ordénalos en la bandeja según el momento en que los usarás por primera vez. Toca un material para agregarlo o quitarlo, o arrástralo para cambiarlo de posición.</p>
+        <h4>Gabinete</h4>
+        <div id="cabinet" class="cabinet"></div>
+        <h4>Bandeja de trabajo <span id="tray-count" class="muted"></span></h4>
+        <div id="plan-tray" class="plan-tray"></div>
+        <div id="plan-result" class="plan-result" hidden></div>
+        <div class="wz-actions">
+          <button id="wz-back3" class="btn ghost">← Protocolo</button>
+          <span class="spacer"></span>
+          <button id="pl-verify" class="btn primary">Verificar bandeja</button>
+          <button id="pl-fix" class="btn when-graded">Usar la bandeja recomendada</button>
+          <button id="pl-start" class="btn primary when-graded">Comenzar el procedimiento →</button>
+        </div>
+      </section>
+
       <details class="howto">
         <summary>¿Cómo se juega?</summary>
         <ul>
@@ -88,14 +123,22 @@
           <li>Los líquidos (ácido, agua, aire, adhesivos, fluida) se aplican <b>mientras mantienes presionado</b> y recorres la superficie.</li>
           <li>El composite se extruye mientras mantienes presionado (1 mm/s). Suelta para terminar cada incremento.</li>
           <li>La lámpara queda encendida hasta que pulses <b>Apagar lámpara</b>: tú controlas el tiempo.</li>
+          <li>Si te falta un material, usa <b>＋ Pedir material</b> al final de la bandeja (descuenta puntos).</li>
           <li>Con un instrumento en la mano, gira la vista con clic derecho (o con dos dedos). <b>Esc</b> lo suelta.</li>
           <li>Usa el <b>🔬 Microscopio</b> para ver la capa híbrida que estás construyendo.</li>
         </ul>
       </details>
-      <button id="btn-start" class="btn primary big">Comenzar</button>
     </div>
   </div>
 
+  <div id="ask" class="overlay hidden">
+    <div class="card">
+      <h2>Pedir material al asistente</h2>
+      <p class="lead">Interrumpir la técnica para pedir un material descuenta 2 puntos. Planificar bien la bandeja lo evita.</p>
+      <div id="ask-list" class="cabinet"></div>
+      <div class="wz-actions"><span></span><button id="ask-cancel" class="btn ghost">Cancelar</button></div>
+    </div>
+  </div>
   <div id="report" class="overlay hidden"><div class="card wide" id="report-card"></div></div>
   <div id="toasts"></div>
   <div id="ghost" class="hidden"></div>

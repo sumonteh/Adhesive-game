@@ -87,7 +87,7 @@ export function evaluate(g) {
   let stress = 12;
   for (const i of incs) if (i.mm > 2) stress += (i.mm - 2) * 16;
   if (!coatOK) stress += 10;
-  if (lvl.fiber) stress += g.fiber.placed ? -4 : 14;
+  if (lvl.fiberIndicated) stress += g.fiber.placed ? -4 : 14;
   stress = clamp(stress, 0, 100);
 
   // ---- Índice biomimético ----
@@ -101,7 +101,7 @@ export function evaluate(g) {
   }
   const shading = thick > 0 ? clamp(correct / thick, 0, 1) : 0;
   const layering = incs.length ? incs.filter(i => i.mm <= 2.25).length / incs.length : 0;
-  const fiberOK = lvl.fiber ? (g.fiber.placed && (g.fiber.cureQ ?? 0) >= 0.9 ? 1 : 0) : 1;
+  const fiberOK = lvl.fiberIndicated ? (g.fiber.placed && (g.fiber.cureQ ?? 0) >= 0.9 ? 1 : 0) : 1;
   const fillScore = filled ? (overfill ? 0.7 : 1) : incs.length ? clamp((g.level - T.floorMin) / (target - T.floorMin), 0, 1) * 0.6 : 0;
   const bio = clamp(100 * (0.35 * shading + 0.15 * layering + 0.2 * (coatOK ? 1 : 0) + 0.15 * fiberOK + 0.15 * fillScore * (g.polished ? 1 : 0.8)), 0, 100);
 
@@ -117,6 +117,15 @@ export function evaluate(g) {
   const stars = score >= 85 ? 3 : score >= 65 ? 2 : score >= 40 ? 1 : 0;
 
   // ---- Retroalimentación ----
+  if (g.plan) {
+    const P = g.plan, msg = `Planificación de la bandeja: ${P.score}/100`
+      + (P.missing.length ? ` · faltaron ${P.missing.length}` : '')
+      + (P.extra.length ? ` · ${P.extra.length} no indicados` : '')
+      + (P.outOfOrder.length ? ` · ${P.outOfOrder.length} fuera de orden` : '');
+    P.score >= 80 ? good(msg) : bad(msg);
+  }
+  if (g.decision) (g.decision.ok ? good : bad)(g.decision.text);
+  if (g.requested?.length) bad(`Pediste ${g.requested.length} material(es) durante el procedimiento`);
   if (E.avg >= 1) {
     const msg = `Esmalte grabado ${E.avg.toFixed(1)} s (objetivo 15 s), cobertura ${Math.round(E.cov * 100)}%`;
     (Math.abs(E.avg - 15) <= 3 && E.cov >= 0.75) ? good(msg) : bad(msg);
@@ -143,7 +152,8 @@ export function evaluate(g) {
   }
   coatOK ? good('Resin coat aplicado y polimerizado: capa híbrida protegida') : bad('Sin resin coat completo y polimerizado');
   if (lvl.matrix) g.flags.matrix ? good('Matriz seccional y cuñas: paredes proximales y punto de contacto') : bad('Sin matriz: paredes proximales y punto de contacto comprometidos');
-  if (lvl.fiber) fiberOK ? good('Fibra de polietileno en el piso (refuerzo biomimético)') : bad('Falta la fibra de refuerzo');
+  if (lvl.fiberIndicated) fiberOK ? good('Fibra de polietileno en el piso (refuerzo biomimético)') : bad('Sin fibra de refuerzo en una MOD profunda');
+  else if (g.fiber.placed) bad('Fibra colocada en una cavidad que no la necesitaba');
   if (incs.length) {
     const thickOnes = incs.filter(i => i.mm > 2.25);
     thickOnes.length ? bad(`${thickOnes.length} incremento(s) mayores a 2 mm`) : good(`${incs.length} incrementos de ≤ 2 mm`);
