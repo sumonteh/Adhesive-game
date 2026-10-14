@@ -167,3 +167,41 @@ La adhesión final se modela como el **eslabón más débil** de las dos interfa
 - Poca presión de asentamiento.
 - Ausencia de esmalte periférico.
 - Envejecimiento: termociclado y almacenamiento en agua.
+
+---
+
+## 5. ¿Existe una adhesión mínima exigida?
+
+**Respuesta corta:** para los adhesivos y cementos de resina sobre diente **no existe un mínimo legal de MPa** que un fabricante deba cumplir para vender su producto. Las normas ISO definen **cómo medir** la adhesión, no un valor de aprobación. Los "mínimos" que se citan son referencias biomecánicas o clínicas.
+
+### 5.1 Normas que regulan la medición, sin umbral
+
+- **ISO/TS 11405** (ensayos de adhesión a la estructura dental) e **ISO 29022** (cizallamiento con muesca): estandarizan la preparación de muestras, el almacenamiento y el ensayo para poder comparar productos. No fijan un valor mínimo.
+- **ISO 4049** (materiales poliméricos de restauración y cementación): exige propiedades del material, como resistencia a la flexión y espesor de película del cemento, pero **no** adhesión al diente.
+- **Aprobación comercial** (FDA 510(k) en EE. UU., marcado CE en Europa): se basa en seguridad y en la equivalencia con productos ya aprobados, no en un número de MPa.
+
+*Nota: estos datos de las normas provienen de conocimiento general del área; no los verifiqué en el texto oficial de cada ISO.*
+
+### 5.2 Donde sí hay un mínimo normativo: metal-cerámica
+
+**ISO 9693 exige ≥ 25 MPa** en el ensayo de Schwickerath (inicio de grieta) para la unión metal–porcelana. Es la unión de una estructura de laboratorio, no una adhesión al diente.
+- Di Fiore A et al. *J Prosthet Dent* 2019. [DOI](https://doi.org/10.1016/j.prosdent.2019.08.001)
+- Kuriyama S et al. *Dent Mater J* 2011: también usa los 25 MPa como referencia para cerámica cementada sobre zirconia. [DOI](https://doi.org/10.4012/dmj.2010-213)
+
+### 5.3 Referencias biomecánicas y clínicas usadas como "mínimo"
+
+| Referencia | Valor | Origen |
+|---|---|---|
+| **Resistir la tensión de contracción** de la resina en cavidades con varias paredes | La tensión puede superar la adhesión y separar la interfase. En la literatura suele citarse **≈ 17–20 MPa** como adhesión necesaria | Davidson, de Gee y Feilzer, *J Dent Res* 1984. [DOI](https://doi.org/10.1177/00220345840630121101) (el rango 17–20 MPa es la cifra que suele citarse a partir de este trabajo, no aparece en el resumen) |
+| **Brackets de ortodoncia** | **6–8 MPa** como mínimo clínicamente aceptable | Reynolds IR, *Br J Orthod* 1975 (referencia clásica; no la encontré indexada en PubMed) |
+| **Metal-cerámica** | **25 MPa** (ISO 9693) | Ver 5.2 |
+
+### 5.4 Cómo usarlo en el juego
+
+Sobre la barra de resultado (peor ↔ mejor escenario) se dibujan **tres líneas de referencia**:
+
+1. **≈ 6–8 MPa: riesgo de descementación.** Por debajo, la retención depende casi solo de la geometría de la preparación.
+2. **≈ 17–20 MPa: umbral para resistir la contracción de polimerización.** Es especialmente relevante en incrustaciones y carillas, donde la retención depende de la adhesión.
+3. **25 MPa:** dato comparativo de la norma metal-cerámica.
+
+Conviene acompañarlas de una advertencia: un valor de laboratorio por encima de estas líneas **no garantiza** el éxito clínico. La adhesión cae con el envejecimiento, como muestran las secciones anteriores.
