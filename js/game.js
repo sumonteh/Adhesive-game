@@ -1,66 +1,90 @@
-// Lógica del procedimiento: aplica instrumentos sobre el diente, controla tiempos,
-// registra errores y avanza el protocolo.
+// Lógica del procedimiento de cementación.
 import * as THREE from 'three';
-import { Tooth, ZONE, UNIT_MM, clamp } from './tooth.js';
-import { TOOLS, makeToolModel } from './tools.js';
-import { buildSteps } from './levels.js';
-import { evaluate, moistureState } from './evaluate.js';
+import { buildCase, Z } from './geometry.js';
+import { Paintable, PRODUCT } from './paintable.js';
+import { TOOLS, CEMENTS, MATERIALS, PRIMERS, matGroup, faceList, FACE_NAME, buildSteps, decisions, DECISION_PEN } from './data.js';
+import { bondModel, scenarioRange, clamp } from './evaluate.js';
+import { makeToolModel } from './tools3d.js';
 
-const GROW = 0.2; // velocidad de extrusión: 0.2 u/s = 1 mm/s
-const SHADES = {
-  dentina: { color: '#dcbd88', name: 'dentina A3' },
-  esmalte: { color: '#efe7d6', name: 'esmalte A2' },
-};
+const TOOTH_PRIMERS = ['toothprimer', 'mlprimer', 'adhese'];
+const REST_PRIMERS = ['silano', 'ccpp', 'monobond'];
 
-export class Game {
-  constructor(scene, ui, cfg, plan = null, decision = null) {
-    this.scene = scene; this.ui = ui; this.cfg = cfg;
-    this.plan = plan; this.decision = decision;
-    this.requested = [];
-    this.total = cfg.protocol === 'total';
-    this.univ = cfg.adhesive === 'universal';
-    this.tooth = new Tooth(cfg.level.cavity);
-    scene.add(this.tooth.group);
-
+export class CemGame {
+  constructor(scene, ui, cfg, plan, tray) {
+    this.scene = scene; this.ui = ui; this.cfg = cfg; this.plan = plan; this.tray = tray;
+    this.C = CEMENTS[cfg.cement];
+    this.g = matGroup(cfg.case);
+    this.M = MATERIALS[cfg.case.material];
     this.t = 0;
-    this.flags = { isolated: false, matrix: false, cleaned: false };
-    this.etch = { applied: false, rinseTime: 0, final: null };
-    this.adh = {
-      started: false, wetD: null, wetE: null, rub: 0, air: 0, cureQ: null,
-      primerStart: null, primerDwell: null, primerAir: 0, bondStarted: false, bondAir: 0,
-    };
-    this.coat = { started: false, cureQ: null };
-    this.fiber = { placed: false, cureQ: null };
-    this.incs = [];
-    this.level = this.tooth.floorMin;
-    this.extruding = null;
-    this.polished = false;
-    this.finished = false;
-    this.gelN = 0;
-    this.dentinGelSel = 0;
-    this.lamp = { on: false, time: 0, items: [], model: makeToolModel('lampara'), light: new THREE.PointLight('#4d7bff', 0, 4) };
+    this.root = new THREE.Group();
+    scene.add(this.root);
+
+    const o = buildCase(cfg.case);
+    this.o = o;
+    this.root.add(o.env, o.toothMesh);
+    this.toothP = new Paintable(o.toothMesh, o.zone, { ids: cfg.ids });
+    this.resto = new THREE.Group();
+    this.resto.add(o.outer, o.intaglio);
+    if (o.ring) this.resto.add(o.ring);
+    this.restoP = new Paintable(o.intaglio, null, { base: this.M.color, glass: this.g === 'glass' });
+    this.root.add(this.resto);
+    // Mesa de trabajo
+    const molar = o.kind === 'molar';
+    this.benchPos = molar ? new THREE.Vector3(4.3, 0, 0.9) : new THREE.Vector3(2.1, 0, 0.5);
+    const pad = new THREE.Mesh(new THREE.CylinderGeometry(molar ? 1.25 : 0.8, molar ? 1.3 : 0.85, 0.12, 48),
+      new THREE.MeshStandardMaterial({ color: '#2a3a47', roughness: 0.8 }));
+    pad.position.copy(this.benchPos).setY(-0.06);
+    pad.raycast = () => {};
+    this.root.add(pad);
+    this.resto.rotation.copy(o.benchRot);
+    this.resto.position.set(0, 0, 0);
+    this.resto.updateMatrixWorld(true);
+    const box = new THREE.Box3().setFromObject(this.resto);
+    this.benchPos.y = -box.min.y + 0.02;
+    this.resto.position.copy(this.benchPos);
+    this.benchQuat = this.resto.quaternion.clone();
+    this.anim = null;
+
+    // Excesos de cemento
+    const sg = new THREE.SphereGeometry(molar ? 0.045 : 0.03, 8, 6);
+    this.excess = new THREE.InstancedMesh(sg, new THREE.MeshPhysicalMaterial({ color: '#f3ecdc', roughness: 0.25, clearcoat: 1 }), o.margin.length);
+    this.excessAlive = new Uint8Array(o.margin.length).fill(1);
+    const m4 = new THREE.Matrix4();
+    o.margin.forEach((p, i) => { m4.makeTranslation(p.x, p.y, p.z); this.excess.setMatrixAt(i, m4); });
+    this.excess.visible = false;
+    this.excess.raycast = () => {};
+    this.root.add(this.excess);
+    this.glyc = null;
+
+    // Lámpara
+    this.lamp = { on: false, t: 0, face: null, side: null, model: makeToolModel('lampara'), light: new THREE.PointLight('#4d7bff', 0, 4) };
     this.lamp.model.visible = false;
     this.lamp.model.getObjectByName('beam').visible = true;
-    this.lamp.model.position.set(0.25, 2.05, 0.2);
-    this.lamp.model.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), new THREE.Vector3(0.25, 1.1, 0.2).normalize());
-    this.lamp.light.position.set(0.1, 1.7, 0.1);
-    scene.add(this.lamp.model, this.lamp.light);
+    this.root.add(this.lamp.model, this.lamp.light);
+
+    this.flags = { isolated: false, cleaned: false, toothClean: null };
+    this.tooth = { etchFinal: null, rinseT: 0, primer: null, primerStart: null, primerRub: 0, primerAir: 0, primerLight: 0, wetD: null, wrong: false, hfOnTooth: false, dentinGelSel: 0 };
+    this.restoS = { tried: false, hfDone: false, rinsed: false, hfT: 0, hfCov: 0, apaCov: 0, primer: null, primerStart: null, primerAir: 0, contamAtPrimer: 0, h3po4: false, ivoclean: false, wetAtPrimer: 0 };
+    this.cement = { loaded: false, loadedAt: null, cov: 0, curedEarly: false };
+    this.seat = { seated: false, seatedAt: null, pressT: 0, tackT: 0, excessRemoved: 0, excessCured: false, glycerin: false, faceT: {} };
+    this.finishedPolish = false;
+    this.finished = false;
     this.mistakes = new Map();
     this.tips = new Set();
+    this.requested = [];
     this.steps = buildSteps(cfg);
-    this._liveTimer = 0;
-    this._evalTimer = 0;
-    this.computeLive();
-    // La planificación se evalúa antes de empezar (sin avisos emergentes).
+    this.range = scenarioRange(cfg);
+    this._liveTimer = 0; this._evalTimer = 0;
+    this.decisions = decisions(cfg);
+    for (const d of this.decisions) if (DECISION_PEN[d.level]) this.mistakes.set('dec_' + d.key, { title: d.title, text: d.text, pen: DECISION_PEN[d.level] });
     if (plan && plan.pen > 0) this.mistakes.set('plan', { title: `Planificación de la bandeja (${plan.score}/100)`, text: '', pen: plan.pen });
-    if (decision && decision.pen > 0) this.mistakes.set('decisionFiber', { title: 'Decisión de refuerzo con fibra', text: decision.text, pen: decision.pen });
     ui.renderSteps(this.steps, cfg.guided !== false);
     ui.renderMistakes(this.mistakes);
   }
 
   dispose() {
-    this.tooth.dispose();
-    this.scene.remove(this.tooth.group, this.lamp.model, this.lamp.light);
+    this.scene.remove(this.root);
+    this.root.traverse(o => { o.geometry?.dispose(); if (o.material) (Array.isArray(o.material) ? o.material : [o.material]).forEach(m => m.dispose()); });
   }
 
   // ---- Retroalimentación --------------------------------------------------
@@ -70,257 +94,343 @@ export class Game {
     this.ui.toast('err', title, text);
     this.ui.renderMistakes(this.mistakes);
   }
-  requestMaterial(id) {
-    this.requested.push(id);
-    this.mistake('ask_' + id, `Material pedido: ${TOOLS[id].name}`, 'No estaba en tu bandeja. Interrumpir la técnica para pedir materiales alarga el tiempo de trabajo y arriesga la contaminación del campo.', 2);
-  }
-
   tip(key, title, text, type = 'info') {
     if (key && this.tips.has(key)) return;
     if (key) this.tips.add(key);
     this.ui.toast(type, title, text);
   }
-
-  // ---- Estadísticas -------------------------------------------------------
-  etchStats(zone) {
-    const T = this.tooth, s = T.s;
-    let n = 0, c = 0, sum = 0;
-    for (let k = 0; k < T.NTOP; k++) {
-      if (T.zone[k] !== zone) continue;
-      n++;
-      const te = s.etchT[k] + (s.gel[k] ? this.t - s.gelOn[k] : 0);
-      if (te > 0.5) { c++; sum += te; }
-    }
-    return { cov: n ? c / n : 0, avg: c ? sum / c : 0 };
-  }
-  etchSnapshot() { return { E: this.etchStats(ZONE.ENAMEL), D: this.etchStats(ZONE.DENTIN) }; }
-
-  computeLive() {
-    const T = this.tooth, s = T.s;
-    let nE = 0, nD = 0, wE = 0, wD = 0, aE = 0, aD = 0, pD = 0, cD = 0, gE = 0, gD = 0, tE = 0, tD = 0;
-    for (let k = 0; k < T.NTOP; k++) {
-      const z = T.zone[k];
-      if (z === ZONE.OUTER) continue;
-      if (z === ZONE.ENAMEL) {
-        nE++; wE += s.wet[k]; aE += s.adh[k];
-        if (s.gel[k]) { gE++; tE += this.t - s.gelOn[k]; }
-      } else {
-        nD++; wD += s.wet[k]; aD += s.adh[k]; pD += s.primer[k]; cD += s.coat[k];
-        if (s.gel[k]) { gD++; tD += this.t - s.gelOn[k]; }
-      }
-    }
-    this.live = {
-      wetE: wE / nE, wetD: wD / nD, adhE: aE / nE, adhD: aD / nD, primerD: pD / nD, coatD: cD / nD,
-      gelE: gE, gelD: gD, gelTimeE: gE ? tE / gE : 0, gelTimeD: gD ? tD / gD : 0,
-    };
+  requestMaterial(id) {
+    this.requested.push(id);
+    this.mistake('ask_' + id, `Material pedido: ${TOOLS[id].name}`, 'No estaba en tu bandeja: interrumpir la técnica alarga el trabajo y arriesga la contaminación.', 2);
   }
 
-  evaluate() { this.computeLive(); return evaluate(this); }
+  // ---- Destino del instrumento --------------------------------------------
+  sideOf(hit) {
+    const obj = hit.object;
+    if (obj === this.o.toothMesh) return 'tooth';
+    if (this.seat.seated) return 'tooth';
+    return 'resto';
+  }
 
-  // ---- Instrumentos de aplicación continua --------------------------------
+  faceOf(hit) {
+    const n = hit.face.normal.clone().transformDirection(hit.object.matrixWorld);
+    if (this.o.kind === 'incisor') return n.z >= 0 ? 'V' : 'P';
+    if (n.y > 0.6) return 'O';
+    return n.z >= 0 ? 'V' : 'L';
+  }
+
+  // ---- Aplicación continua -------------------------------------------------
   applyPaint(id, hit, dt, moving) {
-    if (this.finished) return;
-    const T = this.tooth, s = T.s, tool = TOOLS[id], p = hit.point;
-    const k0 = hit.face.a;
-    const inCavity = T.inCav[k0] > 0.02 || T.zone[k0] === ZONE.ENAMEL;
+    if (this.finished || this.anim) return;
+    const side = this.sideOf(hit);
+    const tool = TOOLS[id], p = hit.point;
+    const T = this.toothP, R = this.restoP, ts = this.tooth, rs = this.restoS;
+    const onIntaglio = hit.object === this.o.intaglio;
 
-    switch (id) {
-      case 'acido': {
-        this.preEtchChecks();
-        if (this.adh.started) this.mistake('etchAfterAdh', 'Ácido sobre el adhesivo', 'El grabado se realiza antes del sistema adhesivo. Aplicar ácido sobre el adhesivo destruye la capa formada.', 10);
-        let dentinNew = 0;
-        T.forEachInRadius(p, tool.radius, (k) => {
-          if (!s.gel[k]) {
-            s.gel[k] = 1; s.gelOn[k] = this.t; this.gelN++;
-            if (T.zone[k] === ZONE.DENTIN) dentinNew++;
+    if (id === 'excesos') return this.removeExcess(p, tool.radius);
+
+    if (side === 'tooth') {
+      if (this.seat.seated && id !== 'aire' && id !== 'agua') {
+        this.tip('afterSeat', 'Restauración ya cementada', 'Retira los excesos, aplica glicerina y fotopolimeriza.', 'warn');
+        return;
+      }
+      switch (id) {
+        case 'fosforico': {
+          if (!this.flags.isolated) this.mistake('noIso', 'Sin aislamiento', 'Aísla antes de grabar: la saliva y el fluido crevicular contaminan la superficie.', 6);
+          if (this.cfg.strategy === 'self') this.tip('selfEtch', 'Estrategia autograbante', 'Elegiste no usar ácido fosfórico en el diente.', 'warn');
+          let dNew = 0;
+          T.forEach(p, tool.radius, (k) => { if (!T.s.gel[k]) { T.s.gel[k] = 1; T.s.gelOn[k] = this.t; if (T.zone[k] === Z.DENTIN) dNew++; } });
+          if (this.cfg.strategy !== 'total' && dNew && !this.cfg.ids) {
+            ts.dentinGelSel += dNew;
+            if (ts.dentinGelSel > T.counts[Z.DENTIN] * 0.12) this.mistake('etchDentin', 'Ácido fosfórico en dentina',
+              this.C.selfAdhesive ? 'Con un autoadhesivo, la dentina grabada queda con colágeno sin infiltrar: la adhesión cae a ≈6 MPa.' : 'El primer autograbante necesita la hidroxiapatita de la dentina para la unión química del MDP.', 8);
           }
-        });
-        if (!this.etch.applied) {
-          this.etch.applied = true;
-          this.tip('etchStart', 'Ácido aplicado: el tiempo corre',
-            this.total ? 'Controla los cronómetros: esmalte 15 s, dentina 10 s. Lava con agua para detener el grabado.' : 'Solo esmalte, 15 s. Evita la dentina. Lava con agua para detener el grabado.');
+          break;
         }
-        if (!this.total && dentinNew) {
-          this.dentinGelSel += dentinNew;
-          if (this.dentinGelSel > T.counts[ZONE.DENTIN] * 0.12) this.mistake('etchDentinSel', 'Ácido fosfórico en dentina',
-            'En el grabado selectivo la dentina se trata con el autograbante. El ácido fosfórico elimina la hidroxiapatita que el 10-MDP necesita para unirse químicamente.', 10);
-        }
-        break;
+        case 'hf':
+          ts.hfOnTooth = true;
+          this.mistake('hfTooth', '¡Ácido fluorhídrico sobre el diente!', 'El HF es muy tóxico para los tejidos y no graba el esmalte de forma útil. Solo se usa sobre la cerámica, fuera de boca.', 20);
+          break;
+        case 'agua':
+          if (ts.primer && this.cement.loaded === false && ts.primerAir > 0) this.mistake('waterPrimer', 'Agua sobre el primer', 'Lavaste el primer o adhesivo ya aplicado: hay que repetirlo.', 6);
+          T.forEach(p, tool.radius, (k) => { if (T.s.gel[k]) { T.s.etchT[k] += this.t - T.s.gelOn[k]; T.s.gel[k] = 0; } T.s.wet[k] = 1; });
+          ts.rinseT += dt;
+          if (!ts.etchFinal && T.gelCount() === 0 && T.frac('etchT', 0, 0.5) > 0) this.finishToothEtch();
+          break;
+        case 'aire':
+          if (T.gelCount() > 0) this.mistake('airGel', 'Secado sin lavar el ácido', 'Primero lava el gel con agua.', 3);
+          if (ts.primer && ts.primerAir < 30 && !this.cement.loaded) {
+            const P = PRIMERS[ts.primer];
+            if (ts.primerAir === 0 && P && !P.rub && this.t - ts.primerStart < P.time - 2)
+              this.mistake('tpShort', `Primer con solo ${(this.t - ts.primerStart).toFixed(0)} s de acción`, `${TOOLS[ts.primer].name} necesita ${P.time} s antes del aire.`, 4);
+            if (ts.primerAir === 0) ts._dwellEnd = this.t;
+            ts.primerAir += dt;
+          } else {
+            T.forEach(p, tool.radius, (k, w) => { T.s.wet[k] = Math.max(0, T.s.wet[k] - 0.4 * dt * (0.3 + 0.7 * w)); });
+          }
+          break;
+        case 'arenado':
+          this.flags.cleaned = true;
+          this.flags.toothClean = 'arenado';
+          if (this.cfg.ids) this.mistake('apaIds', 'Arenado sobre el sellado dentinario (IDS)', 'Sobre un IDS, el arenado reduce la adhesión del cemento: limpia con piedra pómez.', 3);
+          else this.tip('apaTooth', 'Arenado intraoral', 'Limpia la dentina mejor que la pómez.', 'ok');
+          T.forEach(p, tool.radius, (k, w) => { T.s.abr[k] = Math.min(1, T.s.abr[k] + w); });
+          break;
+        default:
+          if (PRODUCT[id]) this.applyToothPrimer(id, p, dt, moving);
+          else this.tip(null, 'No aplica aquí', `${tool.name} no se usa sobre el diente.`, 'warn');
       }
-      case 'agua': {
-        if (this.adh.started && this.adh.cureQ === null) this.mistake('waterAdh', 'Agua sobre el adhesivo sin polimerizar', 'Lavaste la capa adhesiva: se diluye y pierde la infiltración.', 10);
-        T.forEachInRadius(p, tool.radius, (k) => {
-          if (s.gel[k]) { s.etchT[k] += this.t - s.gelOn[k]; s.gel[k] = 0; this.gelN--; }
-          s.wet[k] = 1;
-        });
-        if (inCavity) this.etch.rinseTime += dt;
-        if (this.gelN === 0 && this.etch.applied && !this.etch.final) this.finishEtch();
-        break;
-      }
-      case 'aire': {
-        if (this.gelN > 0) this.mistake('airGel', 'Secado sin lavar el ácido', 'Primero lava todo el gel con agua: el aire no detiene el grabado y solo esparce el ácido.', 4);
-        const phase = this.airPhase();
-        if (phase === 'dry') {
-          T.forEachInRadius(p, tool.radius, (k, w) => { s.wet[k] = Math.max(0, s.wet[k] - 0.55 * dt * (0.3 + 0.7 * w)); });
-        } else if (inCavity) {
-          if (phase === 'univ') this.adh.air += dt;
-          else if (phase === 'primer') {
-            if (this.adh.primerDwell === null) this.closePrimer();
-            this.adh.primerAir += dt;
-          } else if (phase === 'bond') this.adh.bondAir += dt;
-        }
-        break;
-      }
-      case 'microbrush': {
-        T.forEachInRadius(p, tool.radius, (k) => { if (s.wet[k] > 0.45) s.wet[k] = Math.max(0.45, s.wet[k] - 2.5 * dt); });
-        break;
-      }
-      case 'universal': case 'primer': case 'bond':
-        this.applyAdhesive(id, p, dt, moving, inCavity);
-        break;
-      case 'fluida': {
-        if (this.adh.cureQ === null) this.mistake('coatNoCure', 'Resin coat sobre adhesivo sin polimerizar', 'Polimeriza primero el adhesivo (10 s) y luego coloca la capa de resina fluida.', 6);
-        if (!this.coat.started) {
-          this.coat.started = true;
-          this.tip('coatStart', 'Resin coat', 'Cubre toda la dentina con una capa delgada (≤ 0.5 mm) de resina fluida.');
-        }
-        T.forEachInRadius(p, tool.radius, (k) => { if (T.inCav[k] > 0.02) s.coat[k] = 1; });
-        break;
-      }
-    }
-  }
-
-  preEtchChecks() {
-    if (!this.flags.isolated) this.mistake('noDam', 'Sin aislamiento absoluto', 'Coloca el dique antes de grabar: la saliva y la humedad contaminan la superficie.', 8);
-    if (!this.flags.cleaned) this.mistake('noClean', 'Cavidad sin limpiar', 'Limpia con piedra pómez antes de grabar para eliminar biofilm y restos.', 3);
-    if (this.cfg.level.matrix && !this.flags.matrix) this.tip('matrixFirst', 'Sugerencia', 'En clase II conviene colocar la matriz y las cuñas antes del grabado.', 'warn');
-  }
-
-  airPhase() {
-    const a = this.adh;
-    if (a.cureQ !== null) return 'none';
-    if (this.univ) return a.started ? 'univ' : 'dry';
-    if (a.bondStarted) return 'bond';
-    if (a.started) return 'primer';
-    return 'dry';
-  }
-
-  closePrimer() {
-    const a = this.adh;
-    a.primerDwell = this.t - a.primerStart;
-    if (a.primerDwell < 17) this.mistake('primerShort', `Primer con solo ${a.primerDwell.toFixed(0)} s de acción`, 'El primer autograbante necesita 20 s para desmineralizar e infiltrar la dentina.', 5);
-    else this.tip(null, 'Primer: ' + a.primerDwell.toFixed(0) + ' s', 'Buen tiempo de acción. Ahora evapora el solvente con aire suave.', 'ok');
-  }
-
-  applyAdhesive(id, p, dt, moving, inCavity) {
-    const T = this.tooth, s = T.s, a = this.adh;
-    if (a.cureQ !== null) { this.tip('adhCured', 'Adhesivo ya polimerizado', 'Continúa con el resin coat.'); return; }
-    if (this.gelN > 0) this.mistake('adhGel', 'Adhesivo sobre ácido sin lavar', 'Lava todo el gel antes de aplicar el sistema adhesivo.', 8);
-    if (!this.etch.final) this.mistake('noEtch', 'Esmalte sin grabar', 'En ambos protocolos el esmalte se graba con ácido fosfórico 37% durante 15 s antes del adhesivo.', 10);
-    if (id === 'bond') {
-      if (!a.started) this.mistake('bondNoPrimer', 'Adhesivo sin primer', 'En el sistema de 2 frascos primero va el primer autograbante (frasco 1).', 8);
-      else if (a.primerDwell === null) { this.closePrimer(); this.mistake('bondNoAir', 'Sin evaporar el primer', 'Antes del frasco 2 seca el primer con aire suave para evaporar agua y solvente.', 4); }
-      a.bondStarted = true;
-    }
-    if (!a.started && id !== 'bond') {
-      a.started = true;
-      this.computeLive();
-      a.wetD = this.live.wetD; a.wetE = this.live.wetE;
-      const ms = moistureState(a.wetD, this.total);
-      if (this.total) {
-        if (a.wetD < 0.15) this.mistake('desiccated', 'Dentina desecada', 'Con grabado total, la dentina seca hace colapsar la red de colágeno y el adhesivo no infiltra. Rehumedece o controla el secado.', 8);
-        else if (a.wetD > 0.82) this.mistake('overwet', 'Dentina encharcada', 'El exceso de agua diluye el adhesivo y deja burbujas en la interfase. Retira los excesos con el microbrush seco.', 6);
-        else this.tip(null, `Dentina: ${ms.label.toLowerCase()}`, 'Buen control de la humedad para la técnica húmeda.', ms.cls === 'ok' ? 'ok' : 'warn');
-      } else if (a.wetD > 0.82) {
-        this.mistake('overwetSE', 'Dentina encharcada', 'El agua sobrante diluye el autograbante. Seca suavemente antes de aplicarlo.', 5);
-      }
-      if (a.wetE > 0.5) this.mistake('wetEnamel', 'Esmalte húmedo', 'El esmalte grabado debe verse blanco tiza (seco) antes del adhesivo.', 4);
-    }
-    if (id === 'primer' && a.primerStart === null) a.primerStart = this.t;
-    const arr = id === 'primer' ? s.primer : s.adh;
-    T.forEachInRadius(p, TOOLS[id].radius, (k) => { if (T.zone[k] !== ZONE.OUTER) arr[k] = 1; });
-    if (id === 'universal' && moving && inCavity) a.rub += dt;
-  }
-
-  finishEtch() {
-    const f = this.etchSnapshot();
-    this.etch.final = f;
-    const { E, D } = f;
-    if (E.cov < 0.7) this.mistake('etchCovE', 'Márgenes de esmalte sin grabar', `Solo grabaste el ${Math.round(E.cov * 100)}% del esmalte. Recorre todo el contorno y el ángulo cavosuperficial.`, 6);
-    if (E.avg > 0 && E.avg < 11) this.mistake('underEtchE', `Esmalte grabado ${E.avg.toFixed(1)} s`, 'Menos de 15 s da un patrón de grabado incompleto y menos microrretención.', 4);
-    if (E.avg > 20) this.mistake('overEtchE', `Esmalte grabado ${E.avg.toFixed(1)} s`, 'El protocolo indica 15 s. Más tiempo no mejora la adhesión al esmalte.', 2);
-    if (this.total) {
-      if (D.cov < 0.6) this.mistake('etchCovD', 'Dentina grabada parcialmente', `Solo grabaste el ${Math.round(D.cov * 100)}% de la dentina: quedan zonas con barrillo.`, 5);
-      if (D.avg > 13) this.mistake('overEtchD', `Sobregrabado de dentina (${D.avg.toFixed(1)} s)`, 'La desmineralización supera lo que el adhesivo puede infiltrar: queda colágeno expuesto (nanofiltración) que se degrada con el tiempo.', 8);
-      else if (D.avg > 0 && D.avg < 7) this.mistake('underEtchD', `Dentina grabada ${D.avg.toFixed(1)} s`, 'Con menos de 10 s, el barrillo dentinario puede no eliminarse por completo.', 3);
-    }
-    const msg = this.total
-      ? `Esmalte ${E.avg.toFixed(1)} s (${Math.round(E.cov * 100)}%) · Dentina ${D.avg.toFixed(1)} s (${Math.round(D.cov * 100)}%)`
-      : `Esmalte ${E.avg.toFixed(1)} s (${Math.round(E.cov * 100)}%)`;
-    this.ui.toast('ok', 'Ácido retirado', msg + '. Ahora controla el secado.');
-  }
-
-  // ---- Instrumentos que se sueltan ----------------------------------------
-  drop(id, hit) {
-    if (this.finished) return;
-    const T = this.tooth;
-    if (TOOLS[id].type === 'distractor') {
-      this.mistake('used_' + id, `${TOOLS[id].name}: no indicado`, TOOLS[id].why, 6);
       return;
     }
+
+    // ---- Restauración ----
+    if (!onIntaglio) { this.tip('outerSurf', 'Superficie externa', 'Acondiciona la superficie interna (la que contacta el cemento).', 'warn'); return; }
+    if (this.cement.loaded && id !== 'excesos') { this.tip('cemLoaded', 'Cemento ya cargado', 'Asienta la restauración.', 'warn'); return; }
     switch (id) {
-      case 'dique':
+      case 'hf': {
+        if (this.g !== 'glass') {
+          rs.hfCov = Math.max(rs.hfCov, 0.5);
+          this.mistake('hfNonGlass', 'El HF no graba ' + (this.g === 'zirconia' ? 'la zirconia' : 'el metal'), 'No tiene fase vítrea que disolver. Se acondiciona con arenado y MDP.', 4);
+          break;
+        }
+        R.forEach(p, tool.radius, (k) => { if (!R.s.gel[k]) { R.s.gel[k] = 2; R.s.gelOn[k] = this.t; } });
+        break;
+      }
+      case 'fosforico':
+        rs.h3po4 = true;
+        if (this.g === 'zirconia') this.mistake('h3po4Zr', 'Ácido fosfórico sobre zirconia', 'El fosfato se adsorbe en la zirconia y ocupa los sitios donde se une el MDP. Para limpiarla usa arenado o una pasta limpiadora.', 6);
+        R.forEach(p, tool.radius, (k) => { R.s.contam[k] = Math.max(0, R.s.contam[k] - 0.6); R.s.wet[k] = 0.8; });
+        break;
+      case 'agua':
+        if (rs.primer && rs.primerAir > 0) this.mistake('waterRestPrimer', 'Agua sobre el primer de la restauración', 'Lavaste el primer: hay que repetirlo.', 5);
+        R.forEach(p, tool.radius, (k) => {
+          if (R.s.gel[k]) { R.s.etchT[k] += this.t - R.s.gelOn[k]; R.s.gel[k] = 0; R.s.contam[k] = 0; }
+          R.s.wet[k] = 1;
+        });
+        if (R.frac('etchT', 0, 0.5) > 0 && R.gelCount() === 0 && !rs.rinsed) {
+          rs.rinsed = true; rs.hfDone = true;
+          const st = R.etchStats(Z.INTAGLIO, this.t);
+          rs.hfT = st.avg; rs.hfCov = st.cov;
+          const tgt = this.M.hfTarget;
+          if (st.avg < tgt * 0.6) this.mistake('hfShort', `HF ${st.avg.toFixed(0)} s (objetivo ${tgt} s)`, 'Grabado insuficiente: menos microrretención.', 4);
+          else if (st.avg > tgt * 3) this.mistake('hfLong', `HF ${st.avg.toFixed(0)} s (objetivo ${tgt} s)`, 'Grabado excesivo: debilita la cerámica.', 4);
+          else this.ui.toast('ok', 'Cerámica grabada', `${st.avg.toFixed(1)} s · ${Math.round(st.cov * 100)}% de la superficie. Seca antes del silano.`);
+        }
+        break;
+      case 'aire':
+        if (R.gelCount() > 0) this.mistake('airGelR', 'Secado sin lavar el HF', 'Lava el ácido fluorhídrico con abundante agua.', 3);
+        if (rs.primer) {
+          const P = PRIMERS[rs.primer];
+          if (rs.primerAir === 0 && P && this.t - rs.primerStart < P.time - 2)
+            this.mistake('rpShort', `${TOOLS[rs.primer].name}: ${(this.t - rs.primerStart).toFixed(0)} s de reacción`, `Deja actuar ${P.time} s antes de secar.`, 4);
+          if (rs.primerAir === 0) rs._airStart = this.t;
+          rs.primerAir += dt;
+        }
+        R.forEach(p, tool.radius, (k, w) => { R.s.wet[k] = Math.max(0, R.s.wet[k] - 0.6 * dt * (0.3 + 0.7 * w)); });
+        break;
+      case 'arenado':
+        if (this.g === 'glass') this.mistake('apaGlass', 'Arenado sobre cerámica vítrea', 'Daña la superficie y no reemplaza el grabado con ácido fluorhídrico.', 4);
+        if (rs.primer) this.mistake('apaAfterPrimer', 'Arenado después del primer', 'Eliminaste el primer: hay que aplicarlo de nuevo.', 4);
+        R.forEach(p, tool.radius, (k, w) => { R.s.abr[k] = Math.min(1, R.s.abr[k] + w * 1.5); R.s.contam[k] = 0; });
+        rs.apaCov = R.frac('abr', 0, 0.5);
+        break;
+      case 'ivoclean':
+        rs.ivoclean = true;
+        R.forEach(p, tool.radius, (k) => { R.s.contam[k] = 0; R.s.clean[k] = 1; });
+        break;
+      default:
+        if (PRODUCT[id]) this.applyRestPrimer(id, p, dt);
+        else this.tip(null, 'No aplica aquí', `${tool.name} no se usa sobre la restauración.`, 'warn');
+    }
+  }
+
+  applyToothPrimer(id, p, dt, moving) {
+    const ts = this.tooth, T = this.toothP, want = this.C.toothPrimer;
+    if (T.gelCount() > 0) this.mistake('primerGel', 'Primer sobre ácido sin lavar', 'Lava todo el gel antes del primer.', 5);
+    if (!this.flags.isolated) this.mistake('noIso', 'Sin aislamiento', 'Aísla antes de aplicar el sistema adhesivo.', 6);
+    if (id !== want) {
+      ts.wrong = true;
+      this.mistake('wrongTP_' + id, `${TOOLS[id].name} en el diente`, REST_PRIMERS.includes(id) ? 'Es un primer para la restauración: no se une al diente.' : `No corresponde al sistema ${this.C.name}.`, 4);
+      return;
+    }
+    if (!ts.primer) {
+      ts.primer = id; ts.primerStart = this.t;
+      ts.wetD = T.avg('wet', Z.DENTIN);
+      if (this.cfg.strategy === 'total' && !this.cfg.ids && ts.wetD < 0.15) this.mistake('desic', 'Dentina desecada', 'Con grabado total, la dentina seca hace colapsar el colágeno.', 5);
+    }
+    T.forEach(p, TOOLS[id].radius, (k) => { T.s.prod[k] = PRODUCT[id]; });
+    if (moving) ts.primerRub += dt;
+  }
+
+  applyRestPrimer(id, p, dt) {
+    const rs = this.restoS, R = this.restoP, want = this.C.restPrimer[this.g];
+    if (TOOTH_PRIMERS.includes(id)) { this.mistake('tpOnResto', `${TOOLS[id].name} en la restauración`, 'Es un primer para el diente, no para la restauración.', 4); return; }
+    if (this.g === 'glass' && !rs.hfDone) this.mistake('primerNoHF', 'Primer sin grabar la cerámica', 'Primero el ácido fluorhídrico, el lavado y el secado.', 5);
+    if (this.g !== 'glass' && rs.apaCov < 0.5) this.tip('primerNoApa', 'Sin arenado previo', 'El MDP se une mejor a una superficie arenada y limpia.', 'warn');
+    if (!rs.tried) this.tip('primerNoTry', 'Aún no hiciste la prueba clínica', 'Si pruebas después, contaminarás la superficie ya acondicionada.', 'warn');
+    if (id === 'silano' && this.g !== 'glass') this.mistake('silaneZr', 'Silano sobre ' + (this.g === 'zirconia' ? 'zirconia' : 'metal'), 'El silano no aporta adhesión a este material: se necesita MDP.', 3);
+    if (want && id !== want) this.tip('rpOther', `${TOOLS[id].name}`, `El primer del sistema ${this.C.name} es ${TOOLS[want].name}.`, 'warn');
+    if (!rs.primer || rs.primer !== id || rs.contamLater) { rs.primer = id; rs.primerStart = this.t; rs.primerAir = 0; rs._airStart = undefined; rs.contamLater = false; }
+    let n = 0, cont = 0, wet = 0;
+    R.forEach(p, TOOLS[id].radius, (k) => { if (!R.s.prod[k]) { n++; cont += R.s.contam[k]; wet += R.s.wet[k]; } R.s.prod[k] = PRODUCT[id]; });
+    if (n) {
+      rs.contamAtPrimer = Math.max(rs.contamAtPrimer, cont / n);
+      rs.wetAtPrimer = Math.max(rs.wetAtPrimer, wet / n);
+      if (cont / n > 0.3) this.mistake('primerContam', 'Primer sobre superficie contaminada', 'La saliva de la prueba bloquea la unión química. Limpia antes (HF, arenado o pasta limpiadora).', 6);
+      if (wet / n > 0.5) this.mistake('primerWet', 'Primer sobre superficie húmeda', 'Seca la restauración antes del silano o primer.', 3);
+    }
+  }
+
+  finishToothEtch() {
+    const T = this.toothP;
+    const E = T.etchStats(Z.ENAMEL, this.t), D = T.etchStats(Z.DENTIN, this.t);
+    this.tooth.etchFinal = { E, D };
+    if (E.cov < 0.6) this.mistake('etchCovE', 'Esmalte grabado parcialmente', `Solo ${Math.round(E.cov * 100)}% del esmalte.`, 4);
+    if (this.cfg.strategy === 'total' && !this.cfg.ids && D.avg > 14) this.mistake('overEtchD', `Dentina grabada ${D.avg.toFixed(1)} s`, 'Más de 10 s desmineraliza más de lo que el adhesivo infiltra.', 5);
+    const msg = `Esmalte ${E.avg.toFixed(1)} s (${Math.round(E.cov * 100)}%)` + (D.cov > 0.05 ? ` · Dentina ${D.avg.toFixed(1)} s (${Math.round(D.cov * 100)}%)` : '');
+    this.ui.toast('ok', 'Ácido retirado', msg);
+  }
+
+  removeExcess(p, radius) {
+    if (!this.seat.seated) { this.tip('exNoSeat', 'Aún no hay excesos', 'Primero asienta la restauración.', 'warn'); return; }
+    if (this.seat.tackT < 1 && this.C.cure !== 'light') this.tip('exNoTack', 'Excesos sin polimerización inicial', 'Una luz de 2–3 s deja el cemento en gel y facilita retirarlo en bloque.', 'warn');
+    if (this.seat.excessCured) this.mistake('exHard', 'Excesos ya polimerizados', 'Con más de unos segundos de luz, el exceso se endurece: es difícil retirarlo y puedes dañar el margen.', 5);
+    const m = this.o.margin;
+    const local = this.root.worldToLocal(p.clone());
+    let changed = false;
+    for (let i = 0; i < m.length; i++) {
+      if (this.excessAlive[i] && m[i].distanceTo(local) < radius) {
+        this.excessAlive[i] = 0; changed = true;
+        this.excess.setMatrixAt(i, new THREE.Matrix4().makeScale(0, 0, 0));
+      }
+    }
+    if (changed) {
+      this.excess.instanceMatrix.needsUpdate = true;
+      this.seat.excessRemoved = 1 - this.excessAlive.reduce((a, b) => a + b, 0) / m.length;
+    }
+  }
+
+  // ---- Mantener sobre el diente (asentar) ----------------------------------
+  applyHold(id, hit, dt) {
+    if (id !== 'asentar' || this.finished) return;
+    if (!this.cement.loaded) { this.mistake('seatNoCement', 'Asentar sin cemento', 'Primero carga el cemento en la superficie interna de la restauración.', 3); return; }
+    if (this.cement.curedEarly) return;
+    if (!this.seat.seated && !this.anim) {
+      const C = this.C;
+      if (C.toothPrimer && this.tooth.primer !== C.toothPrimer) this.mistake('seatNoTP', 'Diente sin el primer del sistema', `${C.name} necesita ${TOOLS[C.toothPrimer].name} en el diente.`, 8);
+      if (C.toothPrimer && this.tooth.primer && this.tooth.primerAir < 1) this.mistake('seatNoAir', 'Primer sin evaporar', 'Seca suavemente el primer o adhesivo antes de cementar.', 4);
+      if (!this.flags.isolated) this.mistake('noIso', 'Sin aislamiento', 'Cementar sin control de la humedad contamina la interfase.', 6);
+      this.startSeat();
+      return;
+    }
+    if (this.seat.seated) this.seat.pressT += dt;
+  }
+
+  startSeat() {
+    this.anim = { t: 0, dur: 0.7, fromP: this.resto.position.clone(), fromQ: this.resto.quaternion.clone(), toP: new THREE.Vector3(0, 0, 0), toQ: new THREE.Quaternion(), done: () => {
+      this.seat.seated = true; this.seat.seatedAt = this.t;
+      this.excess.visible = true;
+      this.o.intaglio.visible = false;
+      if (this.t - this.cement.loadedAt > 120) this.mistake('slowSeat', 'Asentamiento tardío', `Pasaron ${(this.t - this.cement.loadedAt).toFixed(0)} s desde la mezcla: el cemento empezó a fraguar.`, 4);
+      this.ui.toast('info', 'Restauración asentada', 'Mantén la presión al menos 5 s, luego luz 2–3 s y retira los excesos.');
+    } };
+  }
+
+  // ---- Instrumentos que se sueltan -----------------------------------------
+  drop(id, hit) {
+    if (this.finished || this.anim) return;
+    const side = hit ? this.sideOf(hit) : 'tooth';
+    const T = TOOLS[id];
+    if (T.type === 'distractor') { this.mistake('used_' + id, `${T.name}: no indicado`, T.why, 6); return; }
+    switch (id) {
+      case 'prueba': {
+        if (this.seat.seated) return;
+        if (this.cement.loaded) { this.mistake('tryCement', 'Prueba con cemento cargado', 'La prueba se hace antes de acondicionar y cargar el cemento.', 6); return; }
+        if (this.restoS.primer) this.restoS.contamLater = true;
+        if (this.restoS.primer) this.mistake('tryAfterPrimer', 'Prueba después del primer', 'La saliva contamina la superficie ya acondicionada: hay que limpiarla y repetir el primer.', 5);
+        this.restoS.tried = true;
+        this.anim = { t: 0, dur: 1.6, tryIn: true, fromP: this.resto.position.clone(), fromQ: this.resto.quaternion.clone(), done: () => {
+          for (let k = 0; k < this.restoP.N; k++) { this.restoP.s.contam[k] = 1; }
+          this.restoS.contamFinal = 1;
+          this.ui.toast('ok', 'Prueba clínica', 'Ajuste marginal y contactos correctos. La superficie interna quedó contaminada con saliva.');
+        } };
+        break;
+      }
+      case 'aislamiento':
         if (this.flags.isolated) return;
-        this.flags.isolated = true; T.dam.visible = true;
-        if (this.etch.applied) this.mistake('damLate', 'Dique colocado tarde', 'El aislamiento debe ser el primer paso, antes de cualquier procedimiento adhesivo.', 4);
-        else this.ui.toast('ok', 'Aislamiento absoluto', 'Campo operatorio libre de saliva y humedad.');
+        this.flags.isolated = true; this.o.dam.visible = true;
+        this.ui.toast('ok', 'Aislamiento', 'Campo seco: sin saliva ni fluido crevicular.');
         break;
-      case 'matriz':
-        if (this.flags.matrix) return;
-        this.flags.matrix = true; T.matrix.visible = true;
-        if (this.incs.length) this.mistake('matrixLate', 'Matriz después de la resina', 'La matriz se coloca antes de restaurar las paredes proximales.', 5);
-        else this.ui.toast('ok', 'Matriz seccional + cuñas', 'Pared proximal y punto de contacto asegurados.');
-        break;
-      case 'limpieza':
-        if (this.etch.applied) this.mistake('cleanLate', 'Limpieza después del grabado', 'La profilaxis se hace antes de grabar; ahora contaminas la superficie grabada.', 4);
+      case 'pomez':
+        if (this.seat.seated) return;
         this.flags.cleaned = true;
-        for (let k = 0; k < T.NTOP; k++) if (T.inCav[k] > 0.02) T.s.wet[k] = Math.max(T.s.wet[k], 0.9);
-        this.ui.toast('ok', 'Cavidad limpia', 'Biofilm y restos eliminados (queda húmeda).');
+        if (!this.flags.toothClean) this.flags.toothClean = 'pomez';
+        for (let k = 0; k < this.toothP.N; k++) if (this.toothP.zone[k]) this.toothP.s.wet[k] = Math.max(this.toothP.s.wet[k], 0.85);
+        this.ui.toast('ok', 'Diente limpio', 'Restos del provisorio eliminados. Lava y seca.');
         break;
-      case 'fibra':
-        if (this.fiber.placed) return;
-        if (this.adh.cureQ === null) this.mistake('fiberNoAdh', 'Fibra sin adhesivo polimerizado', 'La fibra se coloca sobre dentina ya hibridizada.', 6);
-        if (!this.coat.started) this.mistake('fiberNoCoat', 'Fibra sin lecho de resina fluida', 'La fibra se asienta e impregna sobre una capa de resina fluida.', 3);
-        this.fiber.placed = true; T.fiber.visible = true;
-        this.ui.toast('ok', 'Fibra de polietileno', 'Asentada en el piso pulpar y las cajas. Polimeriza 20 s.');
+      case 'cemento': {
+        if (side !== 'resto') { this.tip('cemTooth', 'Carga el cemento en la restauración', 'Se aplica en la superficie interna de la restauración.', 'warn'); return; }
+        if (this.cement.loaded) return;
+        const rs = this.restoS, want = this.C.restPrimer[this.g];
+        if (this.g === 'glass' && !rs.hfDone) this.mistake('cemNoHF', 'Cerámica sin grabar', 'Falta el ácido fluorhídrico en la superficie interna.', 8);
+        if (this.g !== 'glass' && rs.apaCov < 0.5) this.mistake('cemNoApa', 'Superficie interna sin arenar', 'El arenado limpia la contaminación y es la base de la unión del MDP.', 6);
+        if (want && !rs.primer) this.mistake('cemNoRP', 'Restauración sin primer', `Falta ${TOOLS[want].name}.`, 8);
+        if (!rs.tried) this.mistake('noTry', 'Sin prueba clínica', 'Antes de cementar se verifica el ajuste, los contactos y el color.', 3);
+        this.cement.loaded = true; this.cement.loadedAt = this.t; this.cement.cov = 1;
+        for (let k = 0; k < this.restoP.N; k++) this.restoP.s.cement[k] = 1;
+        this.ui.toast('info', `${this.C.name} cargado`, this.C.cure === 'light' ? 'Cemento fotopolimerizable: tienes tiempo de trabajo, pero no lo expongas a la luz.' : 'Tiempo de trabajo limitado: asienta en menos de 2 minutos.');
         break;
-      case 'lampara':
-        this.startLamp();
+      }
+      case 'lampara': this.startLamp(hit, side); break;
+      case 'glicerina':
+        if (!this.seat.seated) { this.tip('glyNoSeat', 'Aún no', 'La glicerina va sobre los márgenes después de retirar los excesos.', 'warn'); return; }
+        if (this.seat.excessRemoved < 0.85) this.mistake('glyBefore', 'Glicerina antes de retirar excesos', 'Primero retira los excesos; si no, quedan atrapados bajo el gel.', 3);
+        if (Object.values(this.seat.faceT).some(v => v > 5)) this.tip('glyLate', 'Glicerina tardía', 'Debe ir antes de la fotopolimerización final.', 'warn');
+        this.seat.glycerin = true;
+        this.showGlycerin();
+        this.ui.toast('ok', 'Glicerina en los márgenes', 'Barrera contra el oxígeno: el cemento polimeriza también en la superficie.');
         break;
       case 'pulido':
-        this.polish();
+        if (!this.seat.seated) { this.tip('polNoSeat', 'Nada que pulir', 'Primero cementa la restauración.', 'warn'); return; }
+        if (!faceList(this.cfg.case).every(f => (this.seat.faceT[f] || 0) >= 15)) this.mistake('polUncured', 'Pulido antes de terminar la polimerización', 'Fotopolimeriza cada cara antes del pulido.', 4);
+        if (this.seat.excessRemoved < 0.85) this.mistake('polExcess', 'Quedaron excesos de cemento', 'Los excesos en el surco irritan la encía y acumulan placa.', 5);
+        this.finishedPolish = true;
+        this.ui.toast('ok', 'Márgenes pulidos', 'Procedimiento terminado.');
+        setTimeout(() => this.finish(), 900);
         break;
     }
   }
 
-  // ---- Lámpara ------------------------------------------------------------
-  startLamp() {
-    if (this.lamp.on) return;
-    const a = this.adh, items = [];
-    if (a.started && a.cureQ === null) {
-      if (this.univ && a.air < 3) this.mistake('noAirUniv', 'Fotopolimerizado sin evaporar el solvente', 'El agua y el solvente atrapados dejan una capa porosa y débil. Usa aire suave 5 s antes de la luz.', 7);
-      if (!this.univ && !a.bondStarted) this.mistake('cureNoBond', 'Fotopolimerizado sin el frasco 2', 'Falta la capa de adhesivo hidrófobo sobre el primer.', 8);
-      if (this.univ && a.rub < 15) this.mistake('shortRub', `Adhesivo frotado ${a.rub.toFixed(0)} s`, 'Frota activamente 20 s: mejora la infiltración y la interacción química.', 5);
-      items.push({ key: 'adh', label: 'Adhesivo', req: 10, t: 0 });
+  showGlycerin() {
+    const g = new THREE.InstancedMesh(new THREE.SphereGeometry(this.o.kind === 'molar' ? 0.07 : 0.045, 8, 6),
+      new THREE.MeshPhysicalMaterial({ color: '#d8f0ff', transparent: true, opacity: 0.35, roughness: 0.05, clearcoat: 1, depthWrite: false }), this.o.margin.length);
+    const m4 = new THREE.Matrix4();
+    this.o.margin.forEach((p, i) => { m4.makeTranslation(p.x, p.y, p.z); g.setMatrixAt(i, m4); });
+    g.raycast = () => {};
+    this.root.add(g);
+    this.glyc = g;
+  }
+
+  // ---- Lámpara --------------------------------------------------------------
+  startLamp(hit, side) {
+    if (this.lamp.on || !hit) return;
+    const C = this.C;
+    if (!this.seat.seated && side === 'resto' && this.cement.loaded) {
+      this.cement.curedEarly = true;
+      this.mistake('cureEarly', 'Cemento fotopolimerizado fuera de boca', 'El cemento endureció antes de asentar: la restauración no llegará a su posición. Hay que retirarlo y repetir.', 20);
     }
-    if (this.coat.started && this.coat.cureQ === null) items.push({ key: 'coat', label: 'Resin coat', req: 20, t: 0 });
-    if (this.fiber.placed && this.fiber.cureQ === null) items.push({ key: 'fiber', label: 'Fibra + fluida', req: 20, t: 0 });
-    const last = this.incs[this.incs.length - 1];
-    if (last && last.cureQ === null && !this.extruding) items.push({ key: 'inc', inc: last, label: `Incremento ${this.incs.length}`, req: 20, t: 0 });
-    if (!items.length) { this.tip(null, 'Nada que polimerizar', 'No hay material sin polimerizar en este momento.', 'warn'); return; }
-    this.lamp.on = true; this.lamp.time = 0; this.lamp.items = items;
-    this.lamp.model.visible = true; this.lamp.light.intensity = 3;
-    this.ui.showLamp(true);
+    if (!this.seat.seated && side === 'tooth' && !(this.tooth.primer && (C.toothPrimer === 'adhese' || C.toothPrimer === 'sbu')))
+      this.tip('lampNothing', 'Nada que polimerizar en el diente', C.toothPrimer ? 'El primer de este sistema no se fotopolimeriza.' : 'Este cemento no usa adhesivo en el diente.', 'warn');
+    const n = hit.face.normal.clone().transformDirection(hit.object.matrixWorld);
+    const face = this.faceOf(hit);
+    this.lamp.on = true; this.lamp.t = 0; this.lamp.face = face; this.lamp.side = side;
+    const dir = n.clone().normalize();
+    this.lamp.model.position.copy(hit.point).addScaledVector(dir, 0.55);
+    this.lamp.model.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir);
+    this.lamp.model.visible = true;
+    this.lamp.light.position.copy(hit.point).addScaledVector(dir, 0.3);
+    this.lamp.light.intensity = 3;
+    this.ui.showLamp(true, this.seat.seated ? `Cara ${FACE_NAME[face]}` : (side === 'tooth' ? 'Adhesivo en el diente' : 'Restauración'));
   }
 
   stopLamp() {
@@ -328,173 +438,195 @@ export class Game {
     this.lamp.on = false;
     this.lamp.model.visible = false; this.lamp.light.intensity = 0;
     this.ui.showLamp(false);
-    for (const it of this.lamp.items) {
-      const q = clamp(it.t / it.req, 0, 1);
-      if (it.key === 'adh') this.adh.cureQ = q;
-      else if (it.key === 'coat') this.coat.cureQ = q;
-      else if (it.key === 'fiber') this.fiber.cureQ = q;
-      else if (it.key === 'inc') {
-        it.inc.cureQ = q;
-        const m = it.inc.mesh.material;
-        m.opacity = 1; m.transparent = false; m.roughness = 0.45; m.clearcoat = 0.3; m.needsUpdate = true;
+    const t = this.lamp.t;
+    if (this.seat.seated) {
+      if (this.seat.excessRemoved < 0.85) {
+        if (t >= 1.5 && t <= 6) this.ui.toast('ok', `Polimerización inicial ${t.toFixed(1)} s`, 'Cemento en gel: retira los excesos con el explorador y el hilo.');
+      } else {
+        const ft = this.seat.faceT[this.lamp.face] || 0;
+        if (ft < 19) this.tip(null, `Cara ${FACE_NAME[this.lamp.face]}: ${ft.toFixed(0)} s`, 'Se recomiendan 20 s por cara.', 'warn');
+        else this.ui.toast('ok', `Cara ${FACE_NAME[this.lamp.face]} polimerizada`, `${ft.toFixed(0)} s.`);
       }
-      if (q < 0.9) this.mistake('under_' + it.label, `${it.label} subpolimerizado`, `Solo ${it.t.toFixed(1)} s de los ${it.req} s necesarios: queda monómero residual y menores propiedades mecánicas.`, 6);
-      else this.ui.toast('ok', `${it.label} polimerizado`, `${it.t.toFixed(1)} s de luz.`);
+    } else if (this.tooth.primer === 'adhese' || this.tooth.primer === 'sbu') {
+      if (this.tooth.primerAir < 1) this.mistake('lightNoAir', 'Luz sin evaporar el solvente', 'Aire suave antes de fotopolimerizar el adhesivo.', 4);
+      this.ui.toast(this.tooth.primerLight >= 9 ? 'ok' : 'warn', 'Adhesivo fotopolimerizado', `${this.tooth.primerLight.toFixed(1)} s (objetivo 10 s).`);
     }
-    this.lamp.items = [];
   }
 
-  // ---- Composite ----------------------------------------------------------
-  startExtrude(id, hit) {
-    if (this.extruding || this.finished) return;
-    const T = this.tooth, a = this.adh;
-    if (T.inCav[hit.face.a] < 0.02) { this.tip('extrudeOut', 'Fuera de la cavidad', 'Coloca el composite dentro de la preparación.', 'warn'); return; }
-    if (this.level >= T.fillTarget + 0.15) { this.tip('full', 'Cavidad completa', 'Pasa al acabado y pulido.', 'warn'); return; }
-    if (this.lamp.on) { this.tip(null, 'Lámpara encendida', 'Apaga la lámpara antes de colocar más material.', 'warn'); return; }
-    if (!a.started) this.mistake('compNoAdh', 'Composite sin sistema adhesivo', 'Sin adhesivo no hay unión: brecha marginal, microfiltración y caries secundaria.', 15);
-    else if (a.cureQ === null) this.mistake('compAdhUncured', 'Composite sobre adhesivo sin polimerizar', 'Polimeriza el adhesivo antes de colocar resina.', 8);
-    if (!this.coat.started) this.mistake('noCoat', 'Sin resin coat', 'Antes del composite, protege la dentina hibridizada con una capa delgada de resina fluida polimerizada.', 6);
-    else if (this.coat.cureQ === null) this.mistake('coatUncuredInc', 'Resin coat sin polimerizar', 'Polimeriza la resina fluida 20 s antes de estratificar.', 4);
-    if (this.cfg.fiber && !this.fiber.placed) this.mistake('noFiber', 'Fibra planificada sin colocar', 'Tu protocolo incluía fibra de polietileno: va sobre la resina fluida, en el piso, antes del primer incremento.', 5);
-    if (this.cfg.level.matrix && !this.flags.matrix) this.mistake('noMatrix', 'Sin matriz', 'Sin matriz no se pueden reconstruir las paredes proximales ni el punto de contacto.', 10);
-    const last = this.incs[this.incs.length - 1];
-    if (last && last.cureQ === null) this.mistake('incUncured' + this.incs.length, 'Incremento sin polimerizar', 'Polimeriza cada incremento 20 s antes de colocar el siguiente.', 5);
-    const shade = TOOLS[id].shade;
-    const inc = { shade, from: this.level, to: this.level, cureQ: null, mesh: T.makeFillMesh(SHADES[shade].color) };
-    T.setFillLevel(inc.mesh, inc.to);
-    this.incs.push(inc);
-    this.extruding = inc;
-  }
-
-  updateExtrude(dt) {
-    const inc = this.extruding, T = this.tooth;
-    inc.to = Math.min(inc.to + GROW * dt, T.fillTarget + 0.25);
-    this.level = inc.to;
-    T.setFillLevel(inc.mesh, inc.to);
-  }
-
-  endExtrude() {
-    const inc = this.extruding;
-    if (!inc) return;
-    this.extruding = null;
-    const T = this.tooth, n = this.incs.length;
-    const mm = (inc.to - inc.from) * UNIT_MM;
-    if (mm < 0.15) {
-      T.group.remove(inc.mesh); inc.mesh.geometry.dispose();
-      this.incs.pop(); this.level = inc.from;
-      return;
-    }
-    if (mm > 2.25) this.mistake('thick' + n, `Incremento ${n} de ${mm.toFixed(1)} mm`, 'Más de 2 mm: polimerización incompleta en profundidad y mayor tensión de contracción. Usa capas ≤ 2 mm.', 6);
-    if (inc.shade === 'esmalte' && inc.from < T.dejY - 0.1) this.mistake('enamelDeep' + n, 'Composite de esmalte en zona de dentina', 'El composite translúcido en profundidad da un resultado grisáceo y sin opacidad. Reemplaza la dentina con composite de dentina hasta la UAD.', 4);
-    if (inc.shade === 'dentina' && inc.to > T.dejY + 0.1) this.mistake('dentinHigh' + n, 'Composite de dentina sobrepasa la UAD', 'El composite opaco en superficie se ve sin vitalidad. Deja ≈2 mm para el composite de esmalte.', 4);
-    const toDej = (T.dejY - inc.to) * UNIT_MM, toTop = (T.fillTarget - inc.to) * UNIT_MM;
-    const where = toDej > 0.2 ? `faltan ${toDej.toFixed(1)} mm hasta la UAD` : toTop > 0.25 ? `faltan ${toTop.toFixed(1)} mm hasta la superficie` : 'superficie alcanzada';
-    this.ui.toast('info', `Incremento ${n}: ${mm.toFixed(1)} mm de ${SHADES[inc.shade].name}`, `${where[0].toUpperCase() + where.slice(1)}. Polimeriza 20 s.`);
-  }
-
-  polish() {
-    const T = this.tooth;
-    if (!this.incs.length) { this.tip(null, 'Nada que pulir', 'Primero restaura la cavidad.', 'warn'); return; }
-    if (this.extruding) return;
-    if (this.incs[this.incs.length - 1].cureQ === null) this.mistake('polishUncured', 'Pulido sin polimerizar', 'Polimeriza el último incremento antes del acabado.', 5);
-    if (this.level < T.fillTarget - 0.05) this.mistake('underfill', 'Restauración incompleta', 'La anatomía oclusal no se reconstruyó por completo: queda un escalón y se pierden contactos oclusales.', 8);
-    this.polished = true;
-    for (const i of this.incs) { const m = i.mesh.material; m.roughness = 0.12; m.clearcoat = 1; m.clearcoatRoughness = 0.05; m.needsUpdate = true; }
-    this.ui.toast('ok', 'Acabado y pulido', 'Superficie lisa y brillante.');
-    setTimeout(() => this.finish(), 1200);
-  }
-
-  finish() {
-    if (this.finished) return;
-    if (this.extruding) this.endExtrude();
-    this.stopLamp();
-    this.finished = true;
-    const ev = this.evaluate();
-    if (this.cfg.timed) {
-      const key = `biobond-best-${this.cfg.level.id}-${this.cfg.protocol}-${this.cfg.adhesive}`;
-      let best = 0;
-      try { best = +localStorage.getItem(key) || 0; } catch { /* almacenamiento no disponible */ }
-      ev.newBest = ev.score > best;
-      ev.best = Math.max(best, ev.score);
-      try { if (ev.newBest) localStorage.setItem(key, String(ev.score)); } catch { /* sin persistencia */ }
-    }
-    this.ui.showReport(ev);
-  }
-
-  // ---- Bucle --------------------------------------------------------------
+  // ---- Bucle ----------------------------------------------------------------
   update(dt) {
+    if (this.anim) {
+      const a = this.anim; a.t += dt;
+      const k = Math.min(1, a.t / a.dur);
+      if (a.tryIn) {
+        const e = Math.sin(Math.PI * k);
+        this.resto.position.lerpVectors(a.fromP, new THREE.Vector3(0, 0, 0), e);
+        this.resto.quaternion.slerpQuaternions(a.fromQ, new THREE.Quaternion(), e);
+      } else {
+        const e = k * k * (3 - 2 * k);
+        this.resto.position.lerpVectors(a.fromP, a.toP, e);
+        this.resto.quaternion.slerpQuaternions(a.fromQ, a.toQ, e);
+      }
+      if (k >= 1) { const done = a.done; this.anim = null; if (a.tryIn) { this.resto.position.copy(this.benchPos); this.resto.quaternion.copy(this.benchQuat); } done?.(); }
+    }
     if (!this.finished) {
       this.t += dt;
-      if (this.cfg.timed && this.t >= this.cfg.level.timeLimit && !this.timedOut) {
-        this.timedOut = true;
-        this.mistake('timeout', 'Se agotó el tiempo', 'El procedimiento se evalúa en el estado en que quedó.', 0);
-        this.finish();
-        return;
-      }
       if (this.lamp.on) {
-        this.lamp.time += dt;
-        for (const it of this.lamp.items) it.t += dt;
-        this.ui.updateLamp(this.lamp.time, this.lamp.items);
-        this.lamp.light.intensity = 2.5 + Math.sin(this.t * 30) * 0.3;
-        if (this.lamp.time >= 60) this.stopLamp();
+        this.lamp.t += dt;
+        this.lamp.light.intensity = 2.6 + Math.sin(this.t * 30) * 0.3;
+        if (this.seat.seated) {
+          if (this.seat.excessRemoved < 0.85) {
+            this.seat.tackT += dt;
+            if (this.seat.tackT > 8 && !this.seat.excessCured) {
+              this.seat.excessCured = true;
+              this.mistake('exCured', 'Excesos polimerizados', 'Fotopolimerizaste demasiado antes de retirar los excesos: quedaron duros en el margen.', 5);
+            }
+          } else {
+            this.seat.faceT[this.lamp.face] = (this.seat.faceT[this.lamp.face] || 0) + dt;
+          }
+        } else if (this.lamp.side === 'tooth' && this.tooth.primer) {
+          this.tooth.primerLight += dt;
+        }
+        this.ui.updateLamp(this.lamp.t, this.lampTarget());
+        if (this.lamp.t > 60) this.stopLamp();
       }
-      if (this.extruding) this.updateExtrude(dt);
       this._liveTimer -= dt;
       if (this._liveTimer <= 0) {
-        this._liveTimer = 0.15;
-        this.computeLive();
+        this._liveTimer = 0.2;
         let changed = false;
         for (const st of this.steps) if (!st.done && st.check(this)) { st.done = true; changed = true; }
         if (changed) this.ui.updateSteps(this.steps);
         this.ui.setReadouts(this.readouts());
-        if (this.cfg.timed) {
-          const left = this.cfg.level.timeLimit - this.t;
-          this.ui.setClock(left, left <= 30);
-          if (left <= 30 && left > 29.8) this.tip('time30', '⏱ Quedan 30 segundos', 'Prioriza terminar la restauración.', 'warn');
-        } else this.ui.setClock(this.t);
+        this.ui.setClock(this.t);
       }
       this._evalTimer -= dt;
-      if (this._evalTimer <= 0) { this._evalTimer = 1; this.ui.setMetrics(evaluate(this)); }
+      if (this._evalTimer <= 0) { this._evalTimer = 1; this.ui.setMetrics(this.evaluate(), this.range); }
     }
-    this.tooth.updateColors(this.t);
+    this.toothP.updateColors(this.t);
+    this.restoP.updateColors(this.t);
+  }
+
+  lampTarget() {
+    if (this.seat.seated) {
+      if (this.seat.excessRemoved < 0.85) return { label: 'Polimerización inicial (tack)', t: this.seat.tackT, req: 3, max: 6 };
+      return { label: `Cara ${FACE_NAME[this.lamp.face]}`, t: this.seat.faceT[this.lamp.face] || 0, req: 20 };
+    }
+    if (this.lamp.side === 'tooth') return { label: 'Adhesivo', t: this.tooth.primerLight, req: 10 };
+    return { label: '—', t: this.lamp.t, req: 0 };
   }
 
   readouts() {
-    const L = this.live, a = this.adh, T = this.tooth, out = [];
-    const tc = (t, target) => Math.abs(t - target) <= 2 ? 'ok' : t > target + 2 ? 'bad' : '';
-    if (this.gelN > 0) {
-      if (L.gelE) out.push({ label: 'Ácido en esmalte', value: `${L.gelTimeE.toFixed(1)} / 15 s`, cls: tc(L.gelTimeE, 15) });
-      if (L.gelD) out.push(this.total
-        ? { label: 'Ácido en dentina', value: `${L.gelTimeD.toFixed(1)} / 10 s`, cls: tc(L.gelTimeD, 10) }
-        : { label: 'Ácido en dentina', value: `${L.gelTimeD.toFixed(1)} s ✖`, cls: 'bad' });
+    const out = [], T = this.toothP, R = this.restoP, rs = this.restoS, ts = this.tooth;
+    const tc = (t, target) => Math.abs(t - target) <= Math.max(2, target * 0.15) ? 'ok' : t > target ? 'bad' : '';
+    if (R.gelCount() > 0) { const st = R.etchStats(Z.INTAGLIO, this.t); out.push({ label: 'HF en la cerámica', value: `${st.avg.toFixed(1)} / ${this.M.hfTarget} s`, cls: tc(st.avg, this.M.hfTarget) }); }
+    if (rs.primer && rs.primerAir < 1 && !this.cement.loaded) {
+      const P = PRIMERS[rs.primer]; const dw = this.t - rs.primerStart;
+      out.push({ label: `${TOOLS[rs.primer].name.split(' (')[0]}`, value: `${dw.toFixed(0)} / ${P.time} s`, cls: dw >= P.time ? 'ok' : '' });
     }
-    if (this.etch.final && !a.started) {
-      out.push({ label: 'Lavado', value: `${this.etch.rinseTime.toFixed(1)} s`, cls: this.etch.rinseTime >= 5 ? 'ok' : '' });
-      const mD = moistureState(L.wetD, this.total), mE = L.wetE < 0.35 ? { label: 'Blanco tiza', cls: 'ok' } : L.wetE < 0.5 ? { label: 'Casi seco', cls: 'warn' } : { label: 'Húmedo', cls: 'warn' };
-      out.push({ label: 'Dentina', value: mD.label, cls: mD.cls });
-      out.push({ label: 'Esmalte', value: mE.label, cls: mE.cls });
+    if (T.gelCount() > 0) {
+      const E = T.etchStats(Z.ENAMEL, this.t), D = T.etchStats(Z.DENTIN, this.t);
+      if (E.cov > 0) out.push({ label: 'Ácido en esmalte', value: `${E.avg.toFixed(1)} / 15 s`, cls: tc(E.avg, 15) });
+      if (D.cov > 0) out.push(this.cfg.strategy === 'total' ? { label: 'Ácido en dentina', value: `${D.avg.toFixed(1)} / 10 s`, cls: tc(D.avg, 10) } : { label: 'Ácido en dentina', value: `${D.avg.toFixed(1)} s ✖`, cls: 'bad' });
     }
-    if (a.started && a.cureQ === null) {
-      if (this.univ) {
-        out.push({ label: 'Frotado activo', value: `${a.rub.toFixed(1)} / 20 s`, cls: a.rub >= 20 ? 'ok' : '' });
-        out.push({ label: 'Aire (solvente)', value: `${a.air.toFixed(1)} / 5 s`, cls: a.air >= 5 ? 'ok' : '' });
-      } else {
-        const dwell = a.primerDwell ?? (a.primerStart !== null ? this.t - a.primerStart : 0);
-        out.push({ label: 'Primer actuando', value: `${dwell.toFixed(1)} / 20 s`, cls: dwell >= 20 ? 'ok' : '' });
-        if (a.primerDwell !== null) out.push({ label: 'Aire primer', value: `${a.primerAir.toFixed(1)} s`, cls: a.primerAir >= 1.5 ? 'ok' : '' });
-        if (a.bondStarted) out.push({ label: 'Aire adhesivo', value: `${a.bondAir.toFixed(1)} s`, cls: a.bondAir >= 1 ? 'ok' : '' });
-      }
+    if (ts.primer && !this.cement.loaded) {
+      const P = PRIMERS[ts.primer];
+      if (P.rub) out.push({ label: 'Frotado activo', value: `${ts.primerRub.toFixed(0)} / ${P.time} s`, cls: ts.primerRub >= P.time ? 'ok' : '' });
+      else out.push({ label: 'Primer actuando', value: `${(this.t - ts.primerStart).toFixed(0)} / ${P.time} s`, cls: this.t - ts.primerStart >= P.time ? 'ok' : '' });
+      out.push({ label: 'Aire', value: `${ts.primerAir.toFixed(1)} / ${P.air} s`, cls: ts.primerAir >= P.air ? 'ok' : '' });
     }
-    if (this.coat.started && this.coat.cureQ === null) out.push({ label: 'Resin coat (dentina)', value: `${Math.round(L.coatD * 100)}%`, cls: L.coatD >= 0.75 ? 'ok' : '' });
-    if (this.extruding) {
-      const mm = (this.extruding.to - this.extruding.from) * UNIT_MM;
-      out.push({ label: 'Incremento', value: `${mm.toFixed(1)} mm`, cls: mm > 2.25 ? 'bad' : mm >= 1 ? 'ok' : '' });
-    }
-    if (this.incs.length || this.coat.cureQ !== null) {
-      const toDej = (T.dejY - this.level) * UNIT_MM, toTop = (T.fillTarget - this.level) * UNIT_MM;
-      if (toDej > 0.1) out.push({ label: 'Hasta la UAD', value: `${toDej.toFixed(1)} mm`, cls: '' });
-      out.push({ label: 'Hasta la superficie', value: toTop > 0.1 ? `${toTop.toFixed(1)} mm` : 'completo', cls: toTop <= 0.25 ? 'ok' : '' });
+    if (this.cement.loaded && !this.seat.seated) { const w = this.t - this.cement.loadedAt; out.push({ label: 'Tiempo desde la mezcla', value: `${w.toFixed(0)} s`, cls: w > 120 ? 'bad' : w > 90 ? 'warn' : '' }); }
+    if (this.seat.seated) {
+      out.push({ label: 'Presión de asentamiento', value: `${this.seat.pressT.toFixed(1)} / 5 s`, cls: this.seat.pressT >= 5 ? 'ok' : '' });
+      out.push({ label: 'Excesos retirados', value: `${Math.round(this.seat.excessRemoved * 100)}%`, cls: this.seat.excessRemoved >= 0.85 ? 'ok' : '' });
+      for (const f of faceList(this.cfg.case)) { const v = this.seat.faceT[f] || 0; out.push({ label: `Luz ${FACE_NAME[f]}`, value: `${v.toFixed(0)} / 20 s`, cls: v >= 19 ? 'ok' : '' }); }
     }
     return out;
   }
+
+  // ---- Evaluación -----------------------------------------------------------
+  summary() {
+    const T = this.toothP, R = this.restoP, ts = this.tooth, rs = this.restoS;
+    const ef = ts.etchFinal || { E: T.etchStats(Z.ENAMEL, this.t), D: T.etchStats(Z.DENTIN, this.t) };
+    const P = this.C.toothPrimer ? PRIMERS[this.C.toothPrimer] : null;
+    let tp = { id: ts.primer, cov: 0, timeQ: 0, airQ: 0, lightQ: 0 };
+    if (ts.primer && P) {
+      const zoneCov = (T.counts[Z.ENAMEL] * frac(T, Z.ENAMEL) + T.counts[Z.DENTIN] * frac(T, Z.DENTIN)) / Math.max(1, T.counts[Z.ENAMEL] + T.counts[Z.DENTIN]);
+      const dwell = P.rub ? ts.primerRub : (ts.primerAir > 0 ? Math.min(this.t, ts._dwellEnd ?? this.t) - ts.primerStart : this.t - ts.primerStart);
+      tp = { id: ts.primer, cov: zoneCov, timeQ: clamp(dwell / P.time, 0, 1), airQ: clamp(ts.primerAir / P.air, 0, 1), lightQ: clamp(ts.primerLight / 10, 0, 1) };
+    }
+    const rp = rs.primer;
+    let rpCov = 0, rpTime = 0;
+    if (rp) {
+      rpCov = R.frac('prod', 0, 0.5);
+      const RP = PRIMERS[rp];
+      rpTime = clamp(((rs.primerAir > 0 ? rs._airStart ?? this.t : this.t) - rs.primerStart) / RP.time, 0, 1);
+    }
+    // Contaminación que quedó sin tratar: sin primer, o por una prueba posterior al primer.
+    const contamFinal = (!rp || rs.contamLater) ? R.avg('contam') : 0;
+    return {
+      isolated: this.flags.isolated, toothClean: this.flags.toothClean,
+      enamel: { etchT: ef.E.avg, cov: ef.E.cov }, dentin: { etchT: ef.D.avg, cov: ef.D.cov }, wetD: ts.wetD,
+      tp, toothWrong: ts.wrong, hfOnTooth: ts.hfOnTooth,
+      r: { hfT: rs.hfT, hfCov: rs.hfCov, apaCov: rs.apaCov, primer: rp, primerCov: rpCov, primerTimeQ: rpTime, primerAirQ: rp ? clamp(rs.primerAir / 1, 0, 1) : 0,
+        contamAtPrimer: rs.contamAtPrimer, contamFinal, h3po4: rs.h3po4 },
+      cem: { cov: this.cement.loaded ? 1 : 0, delay: this.seat.seatedAt != null && this.cement.loadedAt != null ? this.seat.seatedAt - this.cement.loadedAt : 0, curedEarly: this.cement.curedEarly },
+      pressT: this.seat.pressT, faceT: { ...this.seat.faceT },
+    };
+  }
+
+  evaluate() {
+    const S = this.summary();
+    const m = bondModel(this.cfg, S);
+    // Calidad de los márgenes (no son MPa)
+    let margin = 100;
+    if (this.seat.excessRemoved < 0.85) margin -= 35 * (1 - this.seat.excessRemoved);
+    if (this.seat.excessCured) margin -= 20;
+    if (!this.seat.glycerin) margin -= 15;
+    if (!this.flags.isolated) margin -= 15;
+    if (!this.finishedPolish) margin -= 10;
+    m.margin = clamp(margin, 0, 100);
+    m.summary = S;
+    return m;
+  }
+
+  finish() {
+    if (this.finished) return;
+    this.stopLamp();
+    this.finished = true;
+    this.ui.showReport(this.report(), this.decisions);
+  }
+
+  report() {
+    const m = this.evaluate();
+    const fb = [];
+    const good = (t) => fb.push({ ok: true, text: t }), bad = (t) => fb.push({ ok: false, text: t });
+    const cfg = this.cfg, C = this.C;
+    if (this.plan) (this.plan.score >= 80 ? good : bad)(`Planificación de la bandeja: ${this.plan.score}/100`);
+    for (const n of m.notes) bad(n);
+    const rs = this.restoS, ts = this.tooth;
+    rs.tried ? good('Prueba clínica antes de acondicionar') : bad('Sin prueba clínica');
+    if (this.g === 'glass') rs.hfDone ? good(`HF ${rs.hfT.toFixed(0)} s (objetivo ${this.M.hfTarget} s)`) : bad('Cerámica sin grabar con HF');
+    else rs.apaCov >= 0.7 ? good('Superficie interna arenada') : bad('Superficie interna sin arenar');
+    const want = C.restPrimer[this.g];
+    if (want) rs.primer === want ? good(`${TOOLS[want].name} en la restauración`) : bad(`Faltó ${TOOLS[want].name} en la restauración`);
+    if (rs.contamAtPrimer > 0.3) bad('Primer aplicado sobre la contaminación de la prueba');
+    if (C.toothPrimer) ts.primer === C.toothPrimer ? good(`${TOOLS[C.toothPrimer].name} en el diente`) : bad(`Faltó ${TOOLS[C.toothPrimer].name} en el diente`);
+    this.seat.pressT >= 5 ? good(`Presión de asentamiento ${this.seat.pressT.toFixed(0)} s`) : bad(`Presión de asentamiento de solo ${this.seat.pressT.toFixed(1)} s`);
+    this.seat.excessRemoved >= 0.85 ? good('Excesos retirados') : bad('Quedaron excesos de cemento');
+    this.seat.glycerin ? good('Glicerina en los márgenes') : bad('Sin glicerina: capa inhibida por oxígeno en los márgenes');
+    const faces = faceList(cfg.case), lit = faces.filter(f => (this.seat.faceT[f] || 0) >= 19);
+    lit.length === faces.length ? good('Todas las caras fotopolimerizadas 20 s') : bad(`Caras sin la luz completa: ${faces.filter(f => !lit.includes(f)).map(f => FACE_NAME[f]).join(', ')}`);
+    let pen = 0; for (const x of this.mistakes.values()) pen += x.pen;
+    const best = this.range.best, worst = this.range.worst;
+    const relOf = (v, lo, hi) => clamp((v - lo) / Math.max(1, hi - lo), 0, 1);
+    const rel = (relOf(m.final24, worst.final24, best.final24) + relOf(m.aged, worst.aged, best.aged)) / 2;
+    const score = Math.round(clamp(55 * rel + 0.2 * m.margin + (this.plan ? 0.15 * this.plan.score : 15) + 10 - pen, 0, 100));
+    return { m, best, worst, fb, pen, score, stars: score >= 85 ? 3 : score >= 65 ? 2 : score >= 40 ? 1 : 0, cfg };
+  }
+}
+
+function frac(T, zone) {
+  const a = T.s.prod; let n = 0, c = 0;
+  for (let k = 0; k < T.N; k++) { if (T.zone[k] !== zone) continue; n++; if (a[k]) c++; }
+  return n ? c / n : 0;
 }

@@ -45,7 +45,22 @@ function sdRoundBox(px, pz, bx, bz, rad) {
 function smin(a, b, k) { const h = Math.max(k - Math.abs(a - b), 0) / k; return Math.min(a, b) - h * h * k * 0.25; }
 
 // sd < 0 dentro de la preparación; floor = altura absoluta del piso.
+const rNorm = (x, z) => Math.hypot(x, z) / outlineR(Math.atan2(z, x));
+
 export const CAVITIES = {
+  // Corona intacta (sin preparación): se usa para la forma externa de coronas.
+  none: { sd: () => 1, floor: () => 0, wall: 0.06 },
+  // Onlay: reducción oclusal anatómica de ≈1.75 mm con cubrimiento cuspídeo y caja central.
+  onlay: {
+    sd: (x, z) => (rNorm(x, z) - 0.9) * 1.0,
+    floor: (x, z) => {
+      const r = rNorm(x, z);
+      const anat = surfaceY(x, z, r) - 0.35;
+      const box = sdRoundBox(x, z, 0.45, 0.16, 0.1) < 0 ? 0.92 : Infinity;
+      return Math.min(anat, box);
+    },
+    wall: 0.05,
+  },
   claseI: {
     sd: (x, z) => smin(sdRoundBox(x, z, 0.5, 0.15, 0.13), sdRoundBox(x + 0.02, z, 0.15, 0.27, 0.13), 0.12),
     floor: () => 0.66,
@@ -66,14 +81,14 @@ const PAL = {
 };
 
 export class Tooth {
-  constructor(cavityKey) {
+  constructor(cavityKey, opts = {}) {
     this.cav = CAVITIES[cavityKey];
     this.group = new THREE.Group();
     this._tmp = new THREE.Color();
     this._buildCrown();
     this._buildStates();
     this._buildCavityFill();
-    this._buildSurroundings();
+    if (opts.surroundings !== false) this._buildSurroundings();
   }
 
   _buildCrown() {

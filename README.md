@@ -1,72 +1,70 @@
-# 🦷 BioBond 3D
+# 🦷 CemLab 3D
 
-Simulador 3D (Three.js) de **adhesión dental y odontología biomimética** para estudiantes. Se juega arrastrando instrumentos y materiales desde la bandeja hasta el diente, siguiendo el protocolo adhesivo. Cada decisión (tiempos de grabado, humedad, frotado, evaporación del solvente, polimerización, grosor de los incrementos) cambia la capa híbrida, el sellado y la tensión de contracción. Todo se puede ver en la **vista microscópica**.
+Simulador 3D (Three.js) de **cementación adhesiva** para estudiantes. El alumno lee un caso clínico, elige el cemento y la estrategia en el diente, prepara su bandeja y ejecuta el protocolo sobre **la restauración** (en la mesa, con la superficie interna hacia arriba) y sobre **el diente** preparado. Al terminar ve su resistencia adhesiva **entre el peor y el mejor escenario posible** para ese cemento y material, con líneas de referencia, y una vista microscópica de las dos interfases: diente–cemento y cemento–restauración.
+
+> Rama `claude/cementation-game`. El juego de restauraciones directas (BioBond 3D) sigue en la rama `claude/dental-adhesion-3d-game-qt8pda`.
 
 ## Cómo ejecutarlo
-
-Son módulos ES sin compilación; solo se necesita un servidor estático:
 
 ```bash
 python3 -m http.server 8000
 # abre http://localhost:8000
 ```
 
-Three.js se carga desde jsDelivr (r160).
+Son módulos ES sin compilación; Three.js r160 se carga desde jsDelivr.
 
-### Publicarlo en GitHub Pages
+## Casos
 
-1. En el repositorio: **Settings → Pages**.
-2. En *Build and deployment*, elige **Source: Deploy from a branch**.
-3. Selecciona la rama `claude/dental-adhesion-3d-game-qt8pda` (o `main` si luego la fusionas), carpeta **/ (root)**, y guarda.
-4. En uno o dos minutos el juego queda en `https://sumonteh.github.io/Adhesive-game/`.
+| Caso | Restauración | Material | Particularidad |
+|---|---|---|---|
+| Corona 3.6 | Corona completa | Zirconia 3Y-TZP | Opaca: llega poca luz; necesita arenado + MDP |
+| Onlay 3.6 | Onlay con cubrimiento cuspídeo | Disilicato de litio | No retentiva; dentina extensa (IDS recomendado) |
+| Carilla 1.1 | Carilla | Porcelana feldespática | Esmalte; muy translúcida; estética del cemento |
+| Corona 3.6 | Corona completa | Co-Cr | Metal: la luz no lo atraviesa |
 
-El archivo `.nojekyll` hace que GitHub sirva los archivos tal cual, sin procesarlos con Jekyll.
+## Cementos
 
-## Flujo de la partida
-
-1. **Caso clínico:** se presenta al paciente, la pieza y los hallazgos (profundidad, rebordes, márgenes).
-2. **Protocolo:** el alumno decide la estrategia de grabado, el sistema adhesivo y si usará refuerzo biomimético con fibra. También elige el modo guiado o sin guía, y si juega contrarreloj.
-3. **Bandeja:** el gabinete muestra todos los materiales desordenados, incluidos algunos distractores (hidróxido de calcio, ácido fluorhídrico, silano, hipoclorito, eugenol, amalgama…). El alumno elige solo los que usará y los ordena según el momento de uso. Al verificar, ve el orden recomendado, lo que faltó y por qué no corresponde cada distractor. Se evalúa el primer intento.
-4. **Procedimiento:** trabaja con su propia bandeja. Si le falta algo puede usar **＋ Pedir material** (−2 puntos), y usar un distractor sobre el diente penaliza.
-
-## Casos y protocolos
-
-| Nivel | Caso | Incluye |
+| Cemento | Diente | Restauración |
 |---|---|---|
-| 1 | Clase I oclusal | Protocolo adhesivo completo + resin coat + estratificación |
-| 2 | MOD profunda (biomimética) | Matriz seccional, resin coat, fibra de polietileno, incrementos dentina/esmalte |
+| **Panavia V5** (sucesor de F 2.0) | Tooth Primer 20 s, aire | Clearfil Ceramic Primer Plus |
+| **Multilink Automix** | Multilink Primer A+B 30 s frotando, aire | Monobond Plus 60 s |
+| **RelyX Ultimate** | Scotchbond Universal 20 s, aire 5 s | Silano (vítrea) / Scotchbond Universal (zirconia, metal) |
+| **RelyX U200** | Sin acondicionar la dentina; grabado selectivo del esmalte | Silano (vítrea) / solo arenado |
+| **Variolink Esthetic LC** | Grabado + Adhese Universal + luz 10 s | Monobond Plus · solo fotopolimerizable |
 
-**Modo ⏱ contrarreloj** (opcional, en el menú): 5 min para el Nivel 1 y 7 min para el Nivel 2. Si terminas y pules a tiempo, el tiempo sobrante suma hasta +15 puntos. Si se agota, el procedimiento se evalúa tal como quedó. El récord de cada configuración se guarda en el navegador.
+**Estrategia en el diente:** grabado total (fosfórico: esmalte 15 s, dentina 10 s), grabado selectivo del esmalte o sin ácido fosfórico. **IDS / resin coat** opcional, como si se hubiera hecho en la sesión de preparación.
 
-**Estrategias de grabado**
-- **Grabado total:** ácido ortofosfórico 37%, **esmalte 15 s y dentina 10 s**, y luego adhesivo universal en modo grabado total con técnica húmeda.
-- **Grabado selectivo del esmalte:** ácido solo sobre el esmalte (15 s). La dentina se trata en modo autograbante con:
-  - **adhesivo universal**, o
-  - **autograbante de 2 frascos** (primer con MDP 20 s, aire, adhesivo, aire suave, luz).
+## Flujo
 
-Las dos estrategias continúan con **resin coat** (resina fluida delgada, 20 s de luz) antes de estratificar en incrementos ≤ 2 mm: composite de dentina hasta la UAD y composite de esmalte en la superficie. Al final van el acabado y el pulido.
+1. **Caso clínico.**
+2. **Protocolo:** cemento, estrategia en el diente, IDS, modo guiado y tiempo ×4.
+3. **Bandeja:** el gabinete muestra todos los materiales desordenados, con distractores. El alumno elige y ordena; se corrige el primer intento, junto con las decisiones clínicas.
+4. **Procedimiento:**
+   - **Restauración:** prueba clínica (contamina con saliva), acondicionamiento (HF o arenado), primer y secado.
+   - **Diente:** aislamiento, piedra pómez, grabado, primer o adhesivo.
+   - **Cementado:** cargar el cemento, asentar con presión (≥ 5 s), luz 2–3 s, retirar excesos, glicerina, 20 s de luz por cara y pulido.
+5. **Informe:**
+   - Resistencia a 24 h y envejecida, sobre la franja peor ↔ mejor escenario.
+   - Líneas de referencia: ≈ 6–8 MPa (riesgo de descementación), ≈ 17–20 MPa (resiste la contracción) y 25 MPa (ISO 9693, metal-cerámica).
+   - Eslabón débil, decisiones clínicas y análisis paso a paso.
 
-## Controles
+## Modelo de adhesión
 
-- **Arrastra** un instrumento al diente, o tócalo para tomarlo y después presiona sobre el diente.
-- **Líquidos** (ácido, agua, aire, microbrush, adhesivos, fluida): se aplican mientras mantienes presionado y recorres la superficie. El adhesivo universal solo cuenta como *frotado activo* si mueves el puntero.
-- **Composite:** mantén presionado dentro de la cavidad para extruir (1 mm/s) y suelta para cerrar el incremento.
-- **Lámpara:** queda encendida hasta que pulses *Apagar lámpara*; tú controlas el tiempo.
-- Con un instrumento en la mano, el clic derecho o dos dedos giran la vista. **Esc** suelta el instrumento.
-- **🔬 Microscopio:** muestra la interfase en dentina (colágeno infiltrado o expuesto, tags de resina, hidroxiapatita residual) y en esmalte (patrón de grabado, microrretención).
+`js/evaluate.js` calcula la adhesión del lado diente (esmalte y dentina, según el cemento, la estrategia, el IDS, la presión y la polimerización) y del lado restauración (HF + silano, arenado + MDP, contaminación). La adhesión final es la del **eslabón más débil**. Los valores base y los factores provienen de la síntesis bibliográfica de [`docs/literatura-cementacion.md`](docs/literatura-cementacion.md) (PubMed). Son **valores ilustrativos con fines didácticos**, no mediciones.
 
 ## Estructura
 
 ```
-index.html          interfaz y mapa de importaciones
-css/styles.css
-js/main.js          escena, cámara, arrastrar y soltar, bucle
-js/tooth.js         molar procedural, cavidades, estados por vértice, relleno por incrementos
-js/tools.js         instrumentos de la bandeja y sus modelos 3D
-js/levels.js        casos clínicos, pasos del protocolo y explicaciones
-js/game.js          reglas del procedimiento, tiempos, errores
-js/evaluate.js      modelo de evaluación (adhesión, microfiltración, tensión, biomimetismo)
-js/micro.js         vista microscópica de la interfase
+index.html · css/styles.css
+js/main.js        escena, cámara, arrastrar y soltar, bucle
+js/data.js        casos, cementos, instrumentos, bandeja esperada, pasos y decisiones
+js/geometry.js    muñón + corona, onlay, carilla (geometría procedural)
+js/paintable.js   estados por vértice (gel, arenado, contaminación, primers, cemento)
+js/game.js        reglas del procedimiento, tiempos, errores, informe
+js/evaluate.js    modelo de resistencia adhesiva y escenarios peor/mejor
+js/micro.js       vista microscópica de las dos interfases
+js/planner.js     preparación y corrección de la bandeja
+js/ui.js          interfaz
+js/tools3d.js     modelos 3D de los instrumentos
+js/tooth.js       molar procedural (base compartida con BioBond 3D)
 ```
-
-> Los valores de MPa y los porcentajes salen de un modelo didáctico simplificado; no son mediciones de laboratorio.
