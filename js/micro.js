@@ -106,6 +106,14 @@ export class MicroView {
       const sil = ['silano', 'monobond', 'ccpp', 'sbu'].includes(S.r.primer);
       this.slab(6, 6.3, sil ? '#5fd39a' : '#555', sil ? 0.8 : 0.2);
       this.label(sil ? `Silano (${TOOLS[S.r.primer].name})` : 'Sin silano: no hay unión química', 6.6, sil ? 'ok' : 'bad');
+    } else if (g === 'resin') {
+      const apa = S.r.apaCov > 0.4;
+      this.particles(apa ? 180 : 20, 4, 6, 0.55, apa ? '#d9ccb0' : '#999', rand, 'box');
+      const ua = ['sbu', 'ccpp', 'monobond'].includes(S.r.primer);
+      this.slab(6, 6.3, ua ? '#f0c24b' : '#555', ua ? 0.85 : 0.2);
+      this.label(apa ? 'Composite arenado: relleno expuesto y microrretención' : 'Composite sin arenar: superficie lisa y ya polimerizada', 5, apa ? 'ok' : 'bad');
+      this.label(ua ? `${TOOLS[S.r.primer].name}${S.r.primer === 'sbu' ? ' (MDP + silano + monómeros)' : ''}` : 'Sin adhesivo en el composite', 6.6, ua ? 'ok' : 'bad');
+      if (S.r.silaneExtra) this.label('+ Silano previo opcional: aporte menor', 8.3, '');
     } else {
       const apa = S.r.apaCov > 0.4;
       this.particles(apa ? 200 : 20, 4, 6, 0.6, apa ? '#cfc8bb' : '#999', rand, 'box');
@@ -117,11 +125,12 @@ export class MicroView {
     if (contam > 0.2) { this.particles(80, 5.5, 6.4, 0.35, '#3d5a70', rand); this.label('Proteínas salivales de la prueba (contaminación)', 7.6, 'bad'); }
 
     // ---- Restauración (y 6.3 … 18) ----
-    const col = { zirconia: '#f2f0ea', disilicate: '#e6d8c4', feldspathic: '#efe6d6', metal: '#9ea7b0' }[cfg.case.material];
+    const col = { zirconia: '#f2f0ea', disilicate: '#e6d8c4', feldspathic: '#efe6d6', metal: '#9ea7b0', ceromer: '#e9dcc2' }[cfg.case.material];
     this.slab(6.3, 18, col, cfg.case.material === 'metal' ? 1 : 0.9);
     if (cfg.case.material === 'disilicate') this.particles(260, 7, 17, 0.5, '#fff7ea', rand, 'box', [3.5, 0.5, 0.5]);
     else if (cfg.case.material === 'zirconia') this.particles(300, 7, 17, 1.2, '#ffffff', rand, 'box');
     else if (cfg.case.material === 'feldspathic') this.particles(120, 7, 17, 0.6, '#fffaf2', rand);
+    else if (cfg.case.material === 'ceromer') this.particles(320, 7, 17, 0.35, '#fffdf6', rand);
     const weakR = m.weak === 'restauracion';
     this.label(`${M.name} · cemento–restauración: ${m.rest.toFixed(1)} MPa${weakR ? ' · eslabón débil' : ''}`, 12, weakR ? 'bad' : 'ok');
     this.label(`Adhesión final 24 h: ${m.final24.toFixed(1)} MPa · envejecida: ${m.aged.toFixed(1)} MPa`, 21, 'title');

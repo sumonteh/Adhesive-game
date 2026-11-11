@@ -188,6 +188,11 @@ export class CemGame {
     if (this.cement.loaded && id !== 'excesos') { this.tip('cemLoaded', 'Cemento ya cargado', 'Asienta la restauración.', 'warn'); return; }
     switch (id) {
       case 'hf': {
+        if (this.g === 'resin') {
+          rs.hfOnResin = true;
+          this.mistake('hfResin', 'Ácido fluorhídrico sobre el composite indirecto', 'El HF degrada la superficie del cerómero (ataca el relleno y la matriz). El composite se acondiciona con arenado.', 5);
+          break;
+        }
         if (this.g !== 'glass') {
           rs.hfCov = Math.max(rs.hfCov, 0.5);
           this.mistake('hfNonGlass', 'El HF no graba ' + (this.g === 'zirconia' ? 'la zirconia' : 'el metal'), 'No tiene fase vítrea que disolver. Se acondiciona con arenado y MDP.', 4);
@@ -268,6 +273,7 @@ export class CemGame {
     if (this.g === 'glass' && !rs.hfDone) this.mistake('primerNoHF', 'Primer sin grabar la cerámica', 'Primero el ácido fluorhídrico, el lavado y el secado.', 5);
     if (this.g !== 'glass' && rs.apaCov < 0.5) this.tip('primerNoApa', 'Sin arenado previo', 'El MDP se une mejor a una superficie arenada y limpia.', 'warn');
     if (!rs.tried) this.tip('primerNoTry', 'Aún no hiciste la prueba clínica', 'Si pruebas después, contaminarás la superficie ya acondicionada.', 'warn');
+    if (id === 'silano' && this.g === 'resin') return this.applyOptionalSilane(p);
     if (id === 'silano' && this.g !== 'glass') this.mistake('silaneZr', 'Silano sobre ' + (this.g === 'zirconia' ? 'zirconia' : 'metal'), 'El silano no aporta adhesión a este material: se necesita MDP.', 3);
     if (want && id !== want) this.tip('rpOther', `${TOOLS[id].name}`, `El primer del sistema ${this.C.name} es ${TOOLS[want].name}.`, 'warn');
     if (!rs.primer || rs.primer !== id || rs.contamLater) { rs.primer = id; rs.primerStart = this.t; rs.primerAir = 0; rs._airStart = undefined; rs.contamLater = false; }
@@ -279,6 +285,20 @@ export class CemGame {
       if (cont / n > 0.3) this.mistake('primerContam', 'Primer sobre superficie contaminada', 'La saliva de la prueba bloquea la unión química. Limpia antes (HF, arenado o pasta limpiadora).', 6);
       if (wet / n > 0.5) this.mistake('primerWet', 'Primer sobre superficie húmeda', 'Seca la restauración antes del silano o primer.', 3);
     }
+  }
+
+  // Composite indirecto: silano previo opcional (Scotchbond Universal ya contiene silano).
+  applyOptionalSilane(p) {
+    const rs = this.restoS, R = this.restoP;
+    if (rs.primer) { this.tip('silAfterAdh', 'Silano después del adhesivo', 'Si decides usarlo, el silano va antes del adhesivo universal.', 'warn'); return; }
+    if (rs.apaCov < 0.5) this.tip('silNoApa', 'Sin arenado previo', 'Arena primero el cerómero: es el paso esencial.', 'warn');
+    if (!rs.silaneExtra) {
+      rs.silaneExtra = true; rs.silaneStart = this.t;
+      this.tip('silOptional', 'Silano opcional', 'Scotchbond Universal ya contiene silano. En composites con relleno disperso, un silano aparte no mejora de forma significativa la adhesión; lo esencial es arenar y aplicar el adhesivo universal.', 'info');
+    }
+    let n = 0, cont = 0;
+    R.forEach(p, TOOLS.silano.radius, (k) => { if (!R.s.prod[k]) { n++; cont += R.s.contam[k]; } R.s.prod[k] = PRODUCT.silano; });
+    if (n && cont / n > 0.3) { rs.contamAtPrimer = Math.max(rs.contamAtPrimer, cont / n); this.mistake('primerContam', 'Silano sobre superficie contaminada', 'Limpia la saliva de la prueba antes (arenado o pasta limpiadora).', 6); }
   }
 
   finishToothEtch() {
@@ -568,7 +588,7 @@ export class CemGame {
       enamel: { etchT: ef.E.avg, cov: ef.E.cov }, dentin: { etchT: ef.D.avg, cov: ef.D.cov }, wetD: ts.wetD,
       tp, toothWrong: ts.wrong, hfOnTooth: ts.hfOnTooth,
       r: { hfT: rs.hfT, hfCov: rs.hfCov, apaCov: rs.apaCov, primer: rp, primerCov: rpCov, primerTimeQ: rpTime, primerAirQ: rp ? clamp(rs.primerAir / 1, 0, 1) : 0,
-        contamAtPrimer: rs.contamAtPrimer, contamFinal, h3po4: rs.h3po4 },
+        contamAtPrimer: rs.contamAtPrimer, contamFinal, h3po4: rs.h3po4, silaneExtra: !!rs.silaneExtra, hfOnResin: !!rs.hfOnResin },
       cem: { cov: this.cement.loaded ? 1 : 0, delay: this.seat.seatedAt != null && this.cement.loadedAt != null ? this.seat.seatedAt - this.cement.loadedAt : 0, curedEarly: this.cement.curedEarly },
       pressT: this.seat.pressT, faceT: { ...this.seat.faceT },
     };
@@ -610,6 +630,10 @@ export class CemGame {
     const want = C.restPrimer[this.g];
     if (want) rs.primer === want ? good(`${TOOLS[want].name} en la restauración`) : bad(`Faltó ${TOOLS[want].name} en la restauración`);
     if (rs.contamAtPrimer > 0.3) bad('Primer aplicado sobre la contaminación de la prueba');
+    if (this.g === 'resin') {
+      good(rs.silaneExtra ? 'Silano previo (opcional): aporte menor, Scotchbond Universal ya contiene silano' : 'Sin silano adicional: adecuado, el adhesivo universal ya contiene silano');
+      if (rs.hfOnResin) bad('Ácido fluorhídrico sobre el composite indirecto');
+    }
     if (C.toothPrimer) ts.primer === C.toothPrimer ? good(`${TOOLS[C.toothPrimer].name} en el diente`) : bad(`Faltó ${TOOLS[C.toothPrimer].name} en el diente`);
     this.seat.pressT >= 5 ? good(`Presión de asentamiento ${this.seat.pressT.toFixed(0)} s`) : bad(`Presión de asentamiento de solo ${this.seat.pressT.toFixed(1)} s`);
     this.seat.excessRemoved >= 0.85 ? good('Excesos retirados') : bad('Quedaron excesos de cemento');

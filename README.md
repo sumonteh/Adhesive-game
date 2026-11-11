@@ -21,6 +21,7 @@ Son módulos ES sin compilación; Three.js r160 se carga desde jsDelivr.
 | Onlay 3.6 | Onlay con cubrimiento cuspídeo | Disilicato de litio | No retentiva; dentina extensa (IDS recomendado) |
 | Carilla 1.1 | Carilla | Porcelana feldespática | Esmalte; muy translúcida; estética del cemento |
 | Corona 3.6 | Corona completa | Co-Cr | Metal: la luz no lo atraviesa |
+| Inlay MOD 3.6 | Inlay | Cerómero (composite indirecto) | Arenado + adhesivo universal; silano previo opcional |
 
 ## Cementos
 
@@ -28,7 +29,7 @@ Son módulos ES sin compilación; Three.js r160 se carga desde jsDelivr.
 |---|---|---|
 | **Panavia V5** (sucesor de F 2.0) | Tooth Primer 20 s, aire | Clearfil Ceramic Primer Plus |
 | **Multilink Automix** | Multilink Primer A+B 30 s frotando, aire | Monobond Plus 60 s |
-| **RelyX Ultimate** | Scotchbond Universal 20 s, aire 5 s | Silano (vítrea) / Scotchbond Universal (zirconia, metal) |
+| **RelyX Ultimate** | Scotchbond Universal 20 s, aire 5 s | Silano (vítrea) / Scotchbond Universal (zirconia, metal, composite indirecto arenado; silano previo opcional) |
 | **RelyX U200** | Sin acondicionar la dentina; grabado selectivo del esmalte | Silano (vítrea) / solo arenado |
 | **Variolink Esthetic LC** | Grabado + Adhese Universal + luz 10 s | Monobond Plus · solo fotopolimerizable |
 

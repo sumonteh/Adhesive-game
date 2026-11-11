@@ -43,8 +43,30 @@ function shellFromSubset(index, keep, outerPos, innerPos) {
     g.computeVertexNormals();
     return g;
   };
-  return { outer: mk(outerPos, false), inner: mk(innerPos, true), verts };
+  // Faldón: cierra los bordes libres de la cáscara uniendo la capa externa con la interna.
+  const ec = new Map();
+  for (let t = 0; t < tris.length; t += 3) for (let e = 0; e < 3; e++) {
+    const a = tris[t + e], b = tris[t + (e + 1) % 3];
+    const key = a < b ? a + '_' + b : b + '_' + a;
+    const cur = ec.get(key);
+    ec.set(key, cur ? { n: cur.n + 1, a: cur.a, b: cur.b } : { n: 1, a, b });
+  }
+  const SP = [], SI = [];
+  for (const { n, a, b } of ec.values()) {
+    if (n !== 1) continue;
+    const oa = outerPos(verts[a]), ob = outerPos(verts[b]), ia = innerPos(verts[a]), ib = innerPos(verts[b]);
+    if (Math.abs(oa[1] - ia[1]) + Math.abs(ob[1] - ib[1]) + Math.abs(oa[2] - ia[2]) + Math.abs(ob[2] - ib[2]) < 0.01) continue;
+    const i0 = SP.length / 3;
+    SP.push(...oa, ...ob, ...ib, ...ia);
+    SI.push(i0, i0 + 1, i0 + 2, i0, i0 + 2, i0 + 3);
+  }
+  const skirt = new THREE.BufferGeometry();
+  skirt.setAttribute('position', new THREE.Float32BufferAttribute(SP, 3));
+  skirt.setIndex(SI);
+  skirt.computeVertexNormals();
+  return { outer: mk(outerPos, false), inner: mk(innerPos, true), verts, skirt };
 }
+const skirtMesh = (geo, material) => { const m = new THREE.Mesh(geo, restoMat(material)); m.material.side = THREE.DoubleSide; return m; };
 
 const restoMat = (material) => {
   const m = {
@@ -52,6 +74,7 @@ const restoMat = (material) => {
     disilicate: { color: '#eadfcd', roughness: 0.2, clearcoat: 0.9, metalness: 0, transmission: 0 },
     feldspathic: { color: '#f1e9da', roughness: 0.15, clearcoat: 1, metalness: 0 },
     metal: { color: '#a9b1b9', roughness: 0.28, clearcoat: 0.2, metalness: 0.9 },
+    ceromer: { color: '#ece0c8', roughness: 0.3, clearcoat: 0.7, metalness: 0 },
   }[material];
   return new THREE.MeshPhysicalMaterial({ ...m, side: THREE.FrontSide });
 };
@@ -115,12 +138,14 @@ export function buildCrownCase(material) {
 
 // ---------------------------------------------------------------------------
 // Onlay (molar)
-export function buildOnlayCase(material) {
-  const T = new Tooth('onlay');
+// Onlay e inlay: restauración = cáscara entre la anatomía original y la preparación.
+export function buildShellCase(cavKey, material) {
+  const T = new Tooth(cavKey);
   const zone = new Uint8Array(T.N);
   const P = T.positions;
   for (let k = 0; k < T.NTOP; k++) {
     if (T.zone[k] === ZONE.OUTER) continue;
+    if (cavKey !== 'onlay') { zone[k] = T.zone[k] === ZONE.DENTIN ? Z.DENTIN : Z.ENAMEL; continue; }
     const x = P[k * 3], z = P[k * 3 + 2];
     const r = Math.hypot(x, z) / outlineR(Math.atan2(z, x));
     if (T.inCav[k] <= 0.02) zone[k] = Z.ENAMEL;
@@ -139,7 +164,7 @@ export function buildOnlayCase(material) {
   T.fillVerts.forEach((v, i) => { if (T.inCav[v] < 0.3 && i % 3 === 0) margin.push(new THREE.Vector3(P[v * 3], T.origY[v] + 0.01, P[v * 3 + 2])); });
   // El envoltorio del diente es el grupo de Tooth (incluye encía, vecinos y dique)
   T.group.remove(T.mesh);
-  return { toothMesh, zone, env: T.group, dam: T.dam, outer, intaglio, ring: null, margin, kind: 'molar', benchRot: new THREE.Euler(Math.PI, 0, 0) };
+  return { toothMesh, zone, env: T.group, dam: T.dam, outer, intaglio, ring: skirtMesh(sh.skirt, material), margin, kind: 'molar', benchRot: new THREE.Euler(Math.PI, 0, 0) };
 }
 
 // ---------------------------------------------------------------------------
@@ -202,11 +227,12 @@ export function buildVeneerCase(material) {
   dam.rotation.x = -Math.PI / 2; dam.position.y = 0.05; dam.visible = false;
   env.add(dam);
   env.traverse(o => { if (o.isMesh) o.raycast = () => {}; });
-  return { toothMesh, zone, env, dam, outer, intaglio, ring: null, margin, kind: 'incisor', benchRot: new THREE.Euler(Math.PI / 2, 0, 0) };
+  return { toothMesh, zone, env, dam, outer, intaglio, ring: skirtMesh(sh.skirt, material), margin, kind: 'incisor', benchRot: new THREE.Euler(Math.PI / 2, 0, 0) };
 }
 
 export function buildCase(c) {
   if (c.resto === 'crown') return buildCrownCase(c.material);
-  if (c.resto === 'onlay') return buildOnlayCase(c.material);
+  if (c.resto === 'onlay') return buildShellCase('onlay', c.material);
+  if (c.resto === 'inlay') return buildShellCase('mod', c.material);
   return buildVeneerCase(c.material);
 }

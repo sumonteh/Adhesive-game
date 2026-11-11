@@ -128,6 +128,19 @@ Goracci C et al. *J Adhes Dent* 2006;8:327-35 (PMID 17080881).
 
 Fathy H et al. *BMC Oral Health* 2022 (inlays cementados con RelyX U200). [DOI](https://doi.org/10.1186/s12903-022-02674-5)
 
+### 3.3b Composite indirecto (cerómero / composite de laboratorio o CAD/CAM)
+
+- En composites con **relleno disperso**, el adhesivo universal logra una adhesión igual o mayor que el silano: **el silano no es crucial**. La PICN (Vita Enamic) sí se beneficia del silano.
+  Abdou A et al. *Dent Mater J* 2020. [DOI](https://doi.org/10.4012/dmj.2020-049)
+- Un silano aparte tuvo efectos mixtos: **redujo** la adhesión de Scotchbond Universal a Brilliant Crios y Lava Ultimate. Sobre composite arenado, su impacto fue mínimo.
+  Eggmann F et al. *J Esthet Restor Dent* 2023. [DOI](https://doi.org/10.1111/jerd.13165)
+- **RelyX Ultimate + Scotchbond Universal** sobre composite CAD/CAM arenado: el pretratamiento (silano + SBU vs. solo SBU) tuvo un efecto poco significativo; **el modo de polimerización fue decisivo** (fotopolimerizar el adhesivo y el cemento dio la mayor µTBS).
+  Lührs AK et al. *Dent Mater* 2014. [DOI](https://doi.org/10.1016/j.dental.2013.11.016)
+- Sin tratamiento hay falla adhesiva en la interfase; arenado 50 µm + adhesivo universal fue el mejor protocolo para composite CAD/CAM.
+  Fathy H et al. 2022 (ver 3.3).
+
+**Para el juego (inlay de cerómero):** lo esencial es arenar y aplicar Scotchbond Universal. El silano previo es opcional y no cambia el resultado. Solo aporta algo cuando no se usa adhesivo. El HF no se usa sobre composite.
+
 ### 3.4 Metal (aleación base Co-Cr)
 
 Cizallamiento con Panavia F 2.0 tras termociclado:
@@ -159,7 +172,7 @@ La adhesión final se modela como el **eslabón más débil** de las dos interfa
 | Disilicato | Sin tratar o sin silano: ≈18 MPa | — | HF + silano: ≈45 MPa |
 | Zirconia | Sin tratar: 1–9 MPa · con silano solo: sin beneficio | — | Arenado + MDP: 34–37 MPa (≈17 MPa envejecido) |
 | Metal Co-Cr | Sin tratar: ≈9 MPa | — | Arenado (+ MDP): 13–17 MPa (SBS) |
-| Composite CAD/CAM | Sin tratar: falla adhesiva | — | Arenado + adhesivo universal o silano |
+| Composite indirecto / CAD/CAM | Sin tratar: falla adhesiva (≈8 MPa en el modelo) | Solo arenado (≈15) · arenado + silano sin adhesivo (≈20) | Arenado + adhesivo universal (≈33); el silano previo no cambia el resultado |
 
 **Factores transversales que restan adhesión:**
 - No fotopolimerizar el cemento o el adhesivo.

@@ -90,6 +90,14 @@ export function bondModel(cfg, S) {
     R = 8 + 10 * hfQ + sil * (27 * hfQ + 7); // Simasetha 2022: HF sin silano ≈18, HF + silano ≈45
     if (r.apaCov > 0.3) { R *= 0.85; notes.push('Arenado sobre cerámica vítrea.'); }
     if (r.hfT > M.hfTarget * 3) notes.push('Grabado excesivo de la cerámica: debilita la restauración.');
+  } else if (g === 'resin') {
+    // Composite indirecto: lo esencial es arenado + adhesivo universal; el silano aparte es opcional
+    // (Abdou 2020; Lührs 2014; Eggmann 2023: un silano aparte puede incluso reducir la adhesión de SBU).
+    const apa = clamp(r.apaCov / 0.8, 0, 1);
+    const adh = rp === 'sbu' ? rpQ : (rp === 'ccpp' || rp === 'monobond') ? 0.85 * rpQ : 0;
+    R = 8 + 8 * apa + adh * (14 + 6 * apa) + (adh > 0 ? 0 : (r.silaneExtra ? 6 * (0.5 + 0.5 * apa) : 0));
+    if (r.hfOnResin) { R *= 0.85; notes.push('Ácido fluorhídrico sobre el composite indirecto: degrada la superficie.'); }
+    if (r.apaCov < 0.3) notes.push('Composite indirecto sin arenar: la superficie polimerizada tiene pocos monómeros libres para unirse.');
   } else {
     const apa = clamp(r.apaCov / 0.8, 0, 1);
     const mdpP = (rp === 'ccpp' || rp === 'monobond' || rp === 'sbu') ? rpQ : 0;
@@ -108,6 +116,7 @@ export function bondModel(cfg, S) {
   const ageTooth = (cfg.ids ? 0.85 : C.selfAdhesive ? 0.65 : 0.73) * (reach < 0.3 && C.cure === 'dual' ? 0.9 : 1);
   let ageRest;
   if (g === 'glass') ageRest = rp && rp !== 'sbu' ? 0.8 : 0.55;
+  else if (g === 'resin') ageRest = rp ? 0.75 : 0.55;
   else if (g === 'zirconia') ageRest = r.apaCov > 0.5 && (rp || C.mdp >= 1) ? 0.5 : 0.3;
   else ageRest = 0.8;
 

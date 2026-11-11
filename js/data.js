@@ -34,6 +34,14 @@ export const CASES = [
     findings: ['Muñón mayormente de dentina y composite', 'Esmalte solo en el margen cervical', 'Altura axial ≈ 4 mm: hay retención mecánica', 'Metal: la luz no lo atraviesa'],
     enamelFrac: 0.15, translucency: 0, retentive: true, idsRecommended: true,
   },
+  {
+    id: 'cr', resto: 'inlay', material: 'ceromer', tooth: 'molar',
+    title: 'Inlay MOD de cerómero · 3.6',
+    patient: 'Mujer de 41 años · pieza 3.6 vital con amalgama MOD extensa',
+    story: 'Preparación para inlay MOD con paredes expulsivas y cajas proximales. Inlay de cerómero (composite indirecto de laboratorio, polimerizado con luz y calor).',
+    findings: ['Márgenes en esmalte', 'Dentina expuesta en el piso y las cajas', 'Retención mecánica moderada por las cajas', 'Composite de ≈2 mm: la luz llega parcialmente'],
+    enamelFrac: 0.3, translucency: 0.5, retentive: false, idsRecommended: true,
+  },
 ];
 
 export const MATERIALS = {
@@ -41,34 +49,35 @@ export const MATERIALS = {
   disilicate: { name: 'Disilicato de litio', group: 'glass', color: '#e9dccb', hfTarget: 20 },
   feldspathic: { name: 'Porcelana feldespática', group: 'glass', color: '#efe7d8', hfTarget: 60 },
   metal: { name: 'Aleación Co-Cr', group: 'metal', color: '#9ea7b0', hfTarget: 0 },
+  ceromer: { name: 'Cerómero (composite indirecto)', group: 'resin', color: '#ece0c8', hfTarget: 0 },
 };
 export const matGroup = (c) => MATERIALS[c.material].group;
 
 export const CEMENTS = {
   panavia: {
     name: 'Panavia V5', sub: 'Resina dual con MDP · sucesor de Panavia F 2.0', cure: 'dual', mdp: 1, selfAdhesive: false,
-    toothPrimer: 'toothprimer', restPrimer: { glass: 'ccpp', zirconia: 'ccpp', metal: 'ccpp' }, dentin: 38,
+    toothPrimer: 'toothprimer', restPrimer: { glass: 'ccpp', zirconia: 'ccpp', metal: 'ccpp', resin: 'ccpp' }, dentin: 38,
     protocol: 'Diente: Tooth Primer 20 s y aire suave (no se fotopolimeriza). Restauración: Clearfil Ceramic Primer Plus (silano + MDP).',
     note: 'Panavia F 2.0 usaba ED Primer II (A+B, 30 s) y Clearfil Ceramic Primer.',
   },
   multilink: {
     name: 'Multilink Automix', sub: 'Resina dual autopolimerizable', cure: 'dual', mdp: 0, selfAdhesive: false,
-    toothPrimer: 'mlprimer', restPrimer: { glass: 'monobond', zirconia: 'monobond', metal: 'monobond' }, dentin: 31,
+    toothPrimer: 'mlprimer', restPrimer: { glass: 'monobond', zirconia: 'monobond', metal: 'monobond', resin: 'monobond' }, dentin: 31,
     protocol: 'Diente: Multilink Primer A+B frotando 30 s y aire. Restauración: Monobond Plus 60 s.',
   },
   ultimate: {
     name: 'RelyX Ultimate', sub: 'Resina dual "adhesiva" + Scotchbond Universal', cure: 'dual', mdp: 0, selfAdhesive: false, activator: true,
-    toothPrimer: 'sbu', restPrimer: { glass: 'silano', zirconia: 'sbu', metal: 'sbu' }, dentin: 34.7,
-    protocol: 'Diente: Scotchbond Universal frotando 20 s y aire 5 s (el cemento trae activador para el adhesivo). Restauración: silano en cerámica vítrea; Scotchbond Universal en zirconia y metal.',
+    toothPrimer: 'sbu', restPrimer: { glass: 'silano', zirconia: 'sbu', metal: 'sbu', resin: 'sbu' }, dentin: 34.7,
+    protocol: 'Diente: Scotchbond Universal frotando 20 s y aire 5 s (el cemento trae activador para el adhesivo). Restauración: silano en cerámica vítrea; Scotchbond Universal en zirconia, metal y composite indirecto arenado (silano previo opcional).',
   },
   u200: {
     name: 'RelyX U200', sub: 'Cemento de resina autoadhesivo', cure: 'dual', mdp: 0.5, selfAdhesive: true,
-    toothPrimer: null, restPrimer: { glass: 'silano', zirconia: null, metal: null }, dentin: 15,
+    toothPrimer: null, restPrimer: { glass: 'silano', zirconia: null, metal: null, resin: null }, dentin: 15,
     protocol: 'Diente: sin acondicionar la dentina; grabado selectivo del esmalte recomendado. Restauración: silano en cerámica vítrea; solo arenado en zirconia y metal.',
   },
   variolinkLC: {
     name: 'Variolink Esthetic LC', sub: 'Resina solo fotopolimerizable', cure: 'light', mdp: 0, selfAdhesive: false,
-    toothPrimer: 'adhese', restPrimer: { glass: 'monobond', zirconia: 'monobond', metal: 'monobond' }, dentin: 33,
+    toothPrimer: 'adhese', restPrimer: { glass: 'monobond', zirconia: 'monobond', metal: 'monobond', resin: 'monobond' }, dentin: 33,
     protocol: 'Diente: grabado del esmalte + Adhese Universal 20 s, aire y luz 10 s. Restauración: Monobond Plus 60 s. Solo polimeriza con luz.',
   },
 };
@@ -95,6 +104,11 @@ const FIT = {
     ultimate: ['ok', 'Scotchbond Universal (MDP) sobre metal arenado: buena adhesión.'],
     u200: ['ok', 'En una corona metálica retentiva, el autoadhesivo sobre metal arenado es una opción aceptable.'],
     variolinkLC: ['contra', 'El metal no deja pasar la luz: un cemento solo fotopolimerizable no polimeriza.'] },
+  cr: { ultimate: ['ideal', 'Protocolo recomendado: cerómero arenado + Scotchbond Universal, y el mismo adhesivo universal en el diente.'],
+    panavia: ['ok', 'Funciona con el cerómero arenado y Clearfil Ceramic Primer Plus, aunque el primer no aporta resina adhesiva como un universal.'],
+    multilink: ['ok', 'Funciona con el cerómero arenado y Monobond Plus.'],
+    u200: ['no', 'El inlay depende en buena parte de la adhesión; el autoadhesivo adhiere menos a la dentina y al esmalte.'],
+    variolinkLC: ['no', 'Con ≈2 mm de composite llega poca luz al fondo de las cajas: se prefiere un cemento dual.'] },
 };
 export const cementFit = (cfg) => FIT[cfg.case.id][cfg.cement];
 
@@ -186,6 +200,7 @@ export function expectedTray(cfg) {
 
 export function optionalTools(cfg) {
   const o = ['ivoclean'];
+  if (matGroup(cfg.case) === 'resin') o.push('silano'); // silano previo opcional en composite indirecto
   if (CEMENTS[cfg.cement].toothPrimer === 'sbu') o.push('lampara');
   return o;
 }
@@ -193,6 +208,7 @@ export function optionalTools(cfg) {
 export function notIndicatedReason(id, cfg) {
   const t = TOOLS[id], g = matGroup(cfg.case), C = CEMENTS[cfg.cement];
   if (t.type === 'distractor') return t.why;
+  if (id === 'hf' && g === 'resin') return 'El ácido fluorhídrico degrada el composite indirecto (ataca el relleno y la matriz): se acondiciona con arenado.';
   if (id === 'hf' && g !== 'glass') return 'El ácido fluorhídrico no graba la zirconia ni el metal: no tienen fase vítrea que disolver.';
   if (id === 'arenado' && g === 'glass') return 'El arenado debilita la cerámica vítrea y no crea el patrón retentivo del ácido fluorhídrico.';
   if (id === 'silano' && g !== 'glass') return 'El silano no mejora la adhesión a la zirconia ni al metal: se necesita MDP.';
@@ -231,8 +247,9 @@ export const WHY = {
     glass: (t) => `Ácido fluorhídrico ${t} s: disuelve la fase vítrea y crea microrretención. Luego lava y seca.`,
     zirconia: () => 'Arenado con Al₂O₃ 50 µm: limpia la contaminación de la prueba y aumenta la superficie para el MDP. El HF no graba la zirconia.',
     metal: () => 'Arenado con Al₂O₃ 50 µm: limpia y crea rugosidad. Los óxidos del metal se unen al MDP.',
+    resin: () => 'Arenado con Al₂O₃ 50 µm: limpia la contaminación y aumenta la superficie y la energía superficial del composite. No se usa HF: degrada el composite.',
   },
-  restPrimer: 'El primer de la restauración une químicamente el material con el cemento: silano en la cerámica vítrea y MDP en la zirconia y el metal.',
+  restPrimer: 'El primer de la restauración une químicamente el material con el cemento: silano en la cerámica vítrea y MDP en la zirconia y el metal. En el composite indirecto lo esencial es el arenado + adhesivo universal; un silano previo es opcional (Scotchbond Universal ya contiene silano).',
   aislamiento: 'El control de la humedad es crítico: la saliva y el fluido crevicular reducen la adhesión.',
   pomez: 'Limpia los restos del cemento provisorio. Si hiciste IDS, no arenes encima: el arenado reduce la adhesión al sellado.',
   grabado: {
@@ -259,7 +276,7 @@ export function buildSteps(cfg) {
   add('restMech', g === 'glass' ? `Ácido fluorhídrico ${M.hfTarget} s, lavar y secar` : 'Arenado Al₂O₃ 50 µm de la superficie interna',
     WHY.restMech[g](M.hfTarget), s => g === 'glass' ? (s.restoS.hfDone && s.restoS.rinsed) : s.restoS.apaCov >= 0.7);
   const rp = C.restPrimer[g];
-  if (rp) add('restPrimer', `${TOOLS[rp].name} en la restauración y secar`, WHY.restPrimer, s => s.restoS.primer === rp && s.restoS.primerAir >= 1);
+  if (rp) add('restPrimer', `${TOOLS[rp].name} en la restauración${g === 'resin' ? ' (silano previo opcional)' : ''} y secar`, WHY.restPrimer, s => s.restoS.primer === rp && s.restoS.primerAir >= 1);
   add('aislamiento', 'Aislamiento', WHY.aislamiento, s => s.flags.isolated);
   add('pomez', 'Limpieza con piedra pómez', WHY.pomez, s => s.flags.cleaned);
   if (cfg.strategy !== 'self') add('grabado', cfg.strategy === 'total' ? 'Ácido fosfórico: esmalte 15 s · dentina 10 s' : 'Grabado selectivo del esmalte 15 s', WHY.grabado[cfg.strategy], s => !!s.tooth.etchFinal);
